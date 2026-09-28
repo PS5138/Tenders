@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Environment
+.env
+
+# Uploaded files and other runtime data
+storage/
+
+# Evaluation reports are per-run artefacts; keep the directory, not the reports
+eval/reports/*.md
+eval/reports/*.json
+!eval/reports/.gitkeep
+
+# OS
+.DS_Store
+
+# Local development Postgres started by backend/scripts/dev_db.py
+.devdb/

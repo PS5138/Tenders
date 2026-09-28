@@ -1,0 +1,88 @@
+# Single `docker compose up` starts Postgres with pgvector, applies migrations and the seed,
+# then starts the API and the worker from one image. Nothing is downloaded at start-up:
+# Docling's weights are baked into the image at build time.
+#
+# The image is built once, by `migrate`, and tagged `tenders-backend`; `api` and `worker`
+# reuse the tag (they depend on `migrate`, and compose builds every buildable service before it
+# looks for missing images). The build context is the repository root, trimmed by /.dockerignore.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: tenders
+      POSTGRES_PASSWORD: tenders
+      POSTGRES_DB: tenders
+    ports:
+      # Loopback only: the host-side route for the harness or a locally run API
+      # (.env.example documents localhost:5432). Set TENDERS_DB_PORT in the repo-root .env when a
+      # local Postgres already holds 5432, and use that port in DATABASE_URL from the host.
+      - "127.0.0.1:${TENDERS_DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenders -d tenders"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: tenders-backend
+    command: sh -c "alembic upgrade head && python -m app.db.seed"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
+      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: tenders-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
+      STORAGE_PATH: /data/storage
+      # Baked into the image at build time (backend/Dockerfile); pinned here so a local .env
+      # written for a non-Docker run cannot point the containers elsewhere.
+      DOCLING_ARTIFACTS_PATH: /opt/docling-models
+      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    volumes:
+      - storage:/data/storage
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: tenders-backend
+    command: python -m app.worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
+      STORAGE_PATH: /data/storage
+      # Baked into the image at build time (backend/Dockerfile); pinned here so a local .env
+      # written for a non-Docker run cannot point the containers elsewhere.
+      DOCLING_ARTIFACTS_PATH: /opt/docling-models
+      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    volumes:
+      - storage:/data/storage
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  storage:

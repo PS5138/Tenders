@@ -1,0 +1,636 @@
+{
+  "seed": 0,
+  "question_pack": "question_pack_northern_fells_2025.xlsx",
+  "held_out_submission": "past_submission_northern_fells_2025_heldout.docx",
+  "ingested_submissions": [
+    "past_submission_westmoor_icb_2024.docx",
+    "past_submission_harbourside_fT_2025.docx"
+  ],
+  "sections": [
+    "1. Clinical safety",
+    "2. Information governance",
+    "3. Information security",
+    "4. Interoperability",
+    "5. Implementation and onboarding",
+    "6. Training and support",
+    "7. Commercial",
+    "8. Social value",
+    "9. Company and experience"
+  ],
+  "labels": {
+    "counterpart": "at least one ingested item answers the question",
+    "new": "no ingested item answers the question"
+  },
+  "questions": [
+    {
+      "section": "1. Clinical safety",
+      "number": "1.1",
+      "question_text": "Please describe your compliance with the DCB0129 clinical risk management standard, including the clinical safety case for the product offered.",
+      "concept_id": "cs_dcb0129",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe how your organisation complies with DCB0129 and how the clinical safety case for the proposed solution is maintained.",
+          "concept_id": "cs_dcb0129"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Please describe your compliance with the DCB0129 clinical risk management standard, including the clinical safety case for the product offered.",
+          "concept_id": "cs_dcb0129"
+        }
+      ],
+      "held_out_answer": "Northlight manages clinical risk for Northlight Connect under a clinical risk management system built to DCB0129, the standard that applies to manufacturers of health IT systems. Ownership sits with our Clinical Safety Officer, and the board reviews the system every six months. No release of Northlight Connect is approved for deployment until hazard identification, risk assessment and risk control have been completed for it.\n\nThe clinical safety case report for Northlight Connect is at version 3.2 and was approved by our Clinical Safety Officer on 14 January 2025. The report draws on a hazard log of forty-two identified hazards, each with its initial and residual risk rating and the controls that reduce it. The safety case is reviewed at each major release and no less than once a year, and the current report is available to Northern Fells Community Health NHS Trust under a confidentiality agreement.\n\nClinical safety incidents reported by customers are triaged within one working day, entered in the hazard log where they reveal a new or changed hazard, and closed only when the Clinical Safety Officer has signed off the resolution."
+    },
+    {
+      "section": "1. Clinical safety",
+      "number": "1.2",
+      "question_text": "Who is your named Clinical Safety Officer, what are their qualifications, and how will they be involved in this contract?",
+      "concept_id": "cs_officer",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Provide the name and qualifications of your Clinical Safety Officer and describe their role in the delivery of this contract.",
+          "concept_id": "cs_officer"
+        }
+      ],
+      "held_out_answer": "Our Clinical Safety Officer is Dr Helen Okafor, a registered general nurse with fourteen years of acute clinical experience. Dr Helen Okafor maintains professional registration and is trained to the accredited DCB0129 and DCB0160 clinical risk management syllabus. She reports directly to the Chief Medical Officer and can stop any release on clinical safety grounds.\n\nFor this contract Dr Helen Okafor will join the Northern Fells Community Health NHS Trust Clinical Safety Officer in the deployment hazard workshops, maintain our side of the deployment hazard log and sign the clinical safety closure statement ahead of go-live. Once the service is live she reviews each clinical safety incident and chairs a quarterly clinical safety review open to all customers."
+    },
+    {
+      "section": "1. Clinical safety",
+      "number": "1.3",
+      "question_text": "Explain your hazard log process and how clinical safety incidents are reported, investigated and resolved.",
+      "concept_id": "cs_hazard_log",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Explain your hazard log process and how clinical safety incidents are reported, investigated and resolved.",
+          "concept_id": "cs_hazard_log"
+        }
+      ],
+      "held_out_answer": "At the start of every release cycle clinicians, product managers and engineers hold a structured hazard identification workshop. The hazard log records, for every hazard, its causes and effects, the controls already in place, an initial rating on the DCB0129 five-by-five matrix, the further controls proposed and the residual rating. A hazard with a residual rating above three cannot be released without a written justification from the Clinical Safety Officer.\n\nOur service desk carries a dedicated category for clinical safety incidents; each is escalated to the Clinical Safety Officer within one working day and investigated by root cause analysis. Where an incident affects more than one customer we issue a safety notice to all affected organisations within two working days. Both the hazard log and the incident register are examined at each quarterly clinical safety review."
+    },
+    {
+      "section": "1. Clinical safety",
+      "number": "1.4",
+      "question_text": "Describe how you will support the Trust to discharge its own obligations under DCB0160 during deployment and in live service.",
+      "concept_id": "cs_dcb0160_support",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": "Northern Fells Community Health NHS Trust has its own obligations under DCB0160, and we organise our clinical safety activities so that the Trust can meet them efficiently. Ahead of deployment the Trust's Clinical Safety Officer receives our manufacturer safety case report and the Northlight Connect hazard log as inputs to the deployment safety case.\n\nWe run joint hazard workshops covering local configuration, integration and workflow, and we provide a written deployment hazard assessment for each. In live service every release note carries a clinical safety impact statement signed by our Clinical Safety Officer, giving the Trust the information it needs to update its own hazard log."
+    },
+    {
+      "section": "1. Clinical safety",
+      "number": "1.5",
+      "question_text": "Attach your current clinical safety case report for the proposed solution.",
+      "concept_id": "cs_attach_safety_case",
+      "response_type": "attachment",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.1",
+      "question_text": "Please state your latest Data Security and Protection Toolkit assessment outcome and explain how you keep it current.",
+      "concept_id": "ig_dspt",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Confirm your organisation's current Data Security and Protection Toolkit status and describe how compliance is maintained.",
+          "concept_id": "ig_dspt"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Please state your latest Data Security and Protection Toolkit assessment outcome and explain how you keep it current.",
+          "concept_id": "ig_dspt"
+        }
+      ],
+      "held_out_answer": "Northlight Health Informatics Ltd completed the 2024/25 Data Security and Protection Toolkit assessment with an outcome of Standards Met, published on 27 June 2025 under ODS code 8JX45. Every assessment we have submitted since registering has achieved Standards Met.\n\nOur Data Protection Officer runs an annual cycle to keep the assessment current: evidence is refreshed quarterly, the ten data security standards are mapped to our ISO 27001 controls, and the board signs off the submission before it is published. Data security awareness training is completed by all staff in their first month and every year after that, with completion above ninety-five per cent."
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.2",
+      "question_text": "Has your organisation achieved Standards Met in the most recent Data Security and Protection Toolkit assessment? (Yes/No)",
+      "concept_id": "ig_yn_dspt",
+      "response_type": "yes_no",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Confirm your organisation's current Data Security and Protection Toolkit status and describe how compliance is maintained.",
+          "concept_id": "ig_dspt"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Please state your latest Data Security and Protection Toolkit assessment outcome and explain how you keep it current.",
+          "concept_id": "ig_dspt"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.3",
+      "question_text": "Name your Data Protection Officer and describe the governance structure that oversees data protection in your organisation.",
+      "concept_id": "ig_dpo",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Provide details of your Data Protection Officer and describe your information governance arrangements.",
+          "concept_id": "ig_dpo"
+        }
+      ],
+      "held_out_answer": "Our Data Protection Officer is Marcus Whitfield, who can be contacted at dpo@northlight-health.example. Northlight Health Informatics Ltd is registered with the Information Commissioner's Office under registration number ZB482913. Marcus Whitfield reports to the board, is independent of product delivery and has been in post since 2016.\n\nInformation governance is overseen by a steering group chaired by the Data Protection Officer that meets monthly and reviews incidents, subject access requests, policy changes and audit findings. We maintain policies for data protection, records management, acceptable use, confidentiality and breach management, each reviewed every year. A personal data breach is assessed within twenty-four hours and notified to the controller, and to the Information Commissioner's Office where required, inside seventy-two hours."
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.4",
+      "question_text": "How will you help us complete our Data Protection Impact Assessment, and what controller and processor roles apply to the proposed service?",
+      "concept_id": "ig_dpia",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "How will you help us complete our Data Protection Impact Assessment, and what controller and processor roles apply to the proposed service?",
+          "concept_id": "ig_dpia"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.5",
+      "question_text": "State the location of hosting and processing for all personal data and confirm whether any transfer outside the United Kingdom occurs.",
+      "concept_id": "ig_data_residency",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "State the location of hosting and processing for all personal data and confirm whether any transfer outside the United Kingdom occurs.",
+          "concept_id": "ig_data_residency"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "2. Information governance",
+      "number": "2.6",
+      "question_text": "Describe your data retention and deletion arrangements, including what happens to Trust data at the end of the contract.",
+      "concept_id": "ig_retention",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": "Retention periods are set by Northern Fells Community Health NHS Trust as controller and configured per record type in Northlight Connect, with defaults drawn from the Records Management Code of Practice for Health and Social Care. When a record reaches the end of its retention period it is flagged for review and removed only once the Trust's records manager has confirmed.\n\nAt the end of the contract we provide a full export of the Trust's data in open formats within thirty days of the termination date, and we delete all copies, including backups, within ninety days, issuing a signed certificate of deletion."
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.1",
+      "question_text": "Do you hold ISO 27001 certification? Provide the certificate number, the certifying body, the scope and the date of issue.",
+      "concept_id": "is_iso27001",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Confirm whether your organisation holds ISO/IEC 27001 certification and provide the certificate number, scope and date of issue.",
+          "concept_id": "is_iso27001"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Do you hold ISO 27001 certification? Provide the certificate number, the certifying body, the scope and the date of issue.",
+          "concept_id": "is_iso27001"
+        }
+      ],
+      "held_out_answer": "Northlight Health Informatics Ltd holds ISO/IEC 27001:2022 certification for its information security management system. Our ISO/IEC 27001 certificate, number NHI-27001-0582, was issued on 9 March 2025 by Albion Certification Services Ltd and is valid until 11 March 2027. Certification scope includes the design, development, hosting and support of Northlight Connect together with every corporate system that handles customer data.\n\nSurveillance audits take place annually and the most recent audit raised no major non-conformities. We can supply a copy of the certificate on request."
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.2",
+      "question_text": "Do you hold current Cyber Essentials Plus certification? State the certificate number, issue date and expiry date.",
+      "concept_id": "is_ce_plus",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Confirm whether you hold Cyber Essentials Plus certification and provide the certificate number and expiry date.",
+          "concept_id": "is_ce_plus"
+        }
+      ],
+      "held_out_answer": "Northlight Health Informatics Ltd holds Cyber Essentials Plus certification covering the whole organisation. Our Cyber Essentials Plus certificate, number CEP-1147-2025, was issued on 29 April 2025 by Greyfriars Cyber Assurance Ltd and expires on 28 April 2026.\n\nThe Plus assessment includes an independent technical audit of a sample of our devices and of every internet-facing system, in addition to the self-assessment questionnaire. We renew the certification annually and the renewal assessment is scheduled six weeks before expiry so that there is no gap in coverage."
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.3",
+      "question_text": "Does your organisation hold current Cyber Essentials Plus certification? (Yes/No)",
+      "concept_id": "is_yn_ce_plus",
+      "response_type": "yes_no",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Confirm whether you hold Cyber Essentials Plus certification and provide the certificate number and expiry date.",
+          "concept_id": "is_ce_plus"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.4",
+      "question_text": "Explain your approach to identity, authentication and role-based access control, and how access to clinical records is audited.",
+      "concept_id": "is_access_control",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe how user access to the solution is controlled, including authentication, role-based access and audit of access to patient records.",
+          "concept_id": "is_access_control"
+        }
+      ],
+      "held_out_answer": "Northlight Connect authenticates users through the Trust's identity provider using SAML 2.0 or OpenID Connect, so that Trust joiners, movers and leavers processes apply automatically. Local accounts, where they cannot be avoided, require multi-factor authentication and follow National Cyber Security Centre password guidance.\n\nAccess is role-based: the Trust's administrators define roles that map to job functions, and each role grants the minimum permissions needed. Every view of, and change to, a patient record is written to an immutable audit log that records the user, time, record and action, and the log can be exported to the Trust's audit tooling. The Trust's privacy officer receives alerts whenever a user accesses records outside their normal team or location."
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.5",
+      "question_text": "How often is the solution penetration tested, by whom, and how quickly are vulnerabilities remediated?",
+      "concept_id": "is_pen_testing",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "How often is the solution penetration tested, by whom, and how quickly are vulnerabilities remediated?",
+          "concept_id": "is_pen_testing"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.6",
+      "question_text": "Describe your security incident response process, including how and when the Trust would be notified of a security incident affecting its data.",
+      "concept_id": "is_incident_response",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "3. Information security",
+      "number": "3.7",
+      "question_text": "Describe your business continuity and disaster recovery arrangements, including recovery time and recovery point objectives and the frequency of testing.",
+      "concept_id": "is_bc_dr",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "4. Interoperability",
+      "number": "4.1",
+      "question_text": "Which open standards does the solution support, and how does it connect to national NHS services such as the Personal Demographics Service?",
+      "concept_id": "io_standards",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe the interoperability standards the solution supports and its integration with NHS national services.",
+          "concept_id": "io_standards"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Which open standards does the solution support, and how does it connect to national NHS services such as the Personal Demographics Service?",
+          "concept_id": "io_standards"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "4. Interoperability",
+      "number": "4.2",
+      "question_text": "Explain your approach to integrating with our electronic patient record and patient administration system, and how integration will be tested before go-live.",
+      "concept_id": "io_integration_epr",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe how the solution will integrate with the Trust's electronic patient record and patient administration system, including your approach to integration testing.",
+          "concept_id": "io_integration_epr"
+        }
+      ],
+      "held_out_answer": "Our integration layer connects Northlight Connect to the Trust's electronic patient record and patient administration system, receiving admission, discharge and transfer messages and returning tasks, notes and referral outcomes to the record. Northlight Connect launches in patient context from the electronic patient record, which removes the need to select the patient a second time.\n\nIntegration testing takes place in a dedicated test environment connected to the Trust's test instances, using an agreed message catalogue and test patients. We reconcile message counts daily during the first month of live service and report any discrepancy to the Trust's integration team the same day."
+    },
+    {
+      "section": "4. Interoperability",
+      "number": "4.3",
+      "question_text": "How does the solution use SNOMED CT, dm+d and the NHS number to record and exchange clinical information?",
+      "concept_id": "io_snomed",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "How does the solution use SNOMED CT, dm+d and the NHS number to record and exchange clinical information?",
+          "concept_id": "io_snomed"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "4. Interoperability",
+      "number": "4.4",
+      "question_text": "Confirm the solution's conformance with WCAG 2.2 AA and describe how accessibility is tested.",
+      "concept_id": "io_accessibility",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "5. Implementation and onboarding",
+      "number": "5.1",
+      "question_text": "Describe your proposed implementation approach and timeline, including the main phases and milestones to full go-live.",
+      "concept_id": "im_plan",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Provide an outline implementation plan showing the key phases, milestones and timescales from contract award to go-live.",
+          "concept_id": "im_plan"
+        }
+      ],
+      "held_out_answer": "We propose a twelve-week implementation from contract award to first go-live, led by a named project manager and following our established delivery method. The first two weeks are mobilisation, during which governance is agreed, the joint project team is stood up and the integration and information governance workstreams begin.\n\nDiscovery and design occupy weeks three to five: current workflows are mapped with clinical leads and the configuration of teams, task types and referral pathways is agreed. Weeks six to nine are build, integration and testing, including user acceptance testing led by the Trust with our support. Training runs in weeks nine and ten, with a pilot go-live on two wards in week eleven and Trust-wide roll-out from week twelve.\n\nProgress is reported weekly against the plan and a formal go-live readiness review, including clinical safety sign-off, precedes each go-live."
+    },
+    {
+      "section": "5. Implementation and onboarding",
+      "number": "5.2",
+      "question_text": "How will the implementation be governed, and how will risks and issues be managed and escalated?",
+      "concept_id": "im_governance",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "How will the implementation be governed, and how will risks and issues be managed and escalated?",
+          "concept_id": "im_governance"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "5. Implementation and onboarding",
+      "number": "5.3",
+      "question_text": "Describe your approach to migrating existing task lists and open referrals from the Trust's current systems, including validation and cut-over.",
+      "concept_id": "im_data_migration",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "5. Implementation and onboarding",
+      "number": "5.4",
+      "question_text": "Describe how clinicians and patients are involved in the design and ongoing development of the solution.",
+      "concept_id": "im_user_research",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "6. Training and support",
+      "number": "6.1",
+      "question_text": "How will you train our staff before go-live, and what training is available afterwards for new starters?",
+      "concept_id": "tr_training",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "How will you train our staff before go-live, and what training is available afterwards for new starters?",
+          "concept_id": "tr_training"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "6. Training and support",
+      "number": "6.2",
+      "question_text": "Set out your service desk provision and the service levels offered for availability, incident response and resolution.",
+      "concept_id": "tr_support_sla",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe your support arrangements and service levels, including service desk hours, incident priority definitions and response and resolution targets.",
+          "concept_id": "tr_support_sla"
+        }
+      ],
+      "held_out_answer": "Our service desk is available twenty-four hours a day, every day, by telephone, email and the customer portal. Incidents are assigned one of four priorities: priority one is a total loss of service or a clinical safety risk, priority two a major degradation, priority three a fault affecting a small number of users and priority four a cosmetic issue or service request.\n\nPriority one incidents receive a response within thirty minutes and a resolution or workaround within four hours. Priority two incidents are responded to within one hour and resolved within one working day; priority three within four hours and five working days; priority four within one working day and by the next scheduled release. The service availability target is 99.9 per cent, measured monthly and excluding agreed maintenance windows, and service credits apply when it is missed.\n\nEach month the Trust receives a service report on availability, incident volumes against target and open problems, and we review it together at the quarterly service review."
+    },
+    {
+      "section": "6. Training and support",
+      "number": "6.3",
+      "question_text": "Describe the management information and reporting available to the Trust, including operational dashboards and data extracts.",
+      "concept_id": "tr_mi_reporting",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.1",
+      "question_text": "Explain the structure of your charges and the contract term you propose, without stating prices, which must be entered in the pricing schedule only.",
+      "concept_id": "co_pricing_model",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe your commercial model, including how charges are structured, the proposed contract term and any dependencies on user or bed numbers. Do not include prices in this response.",
+          "concept_id": "co_pricing_model"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.2",
+      "question_text": "What exit management support do you provide, and how will data be returned or transferred to a successor supplier?",
+      "concept_id": "co_contract_exit",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "What exit management support do you provide, and how will data be returned or transferred to a successor supplier?",
+          "concept_id": "co_contract_exit"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.3",
+      "question_text": "Complete the pricing schedule at Appendix C, stating all charges for the initial term and each optional extension year.",
+      "concept_id": "co_pricing_schedule",
+      "response_type": "pricing",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.4",
+      "question_text": "State the charges for any optional modules or services not included in the core subscription, using the format in Appendix C.",
+      "concept_id": "co_optional_charges",
+      "response_type": "pricing",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.5",
+      "question_text": "Do you accept the Trust's terms and conditions, as set out in the Invitation to Tender, without amendment? (Yes/No)",
+      "concept_id": "co_yn_terms",
+      "response_type": "yes_no",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "7. Commercial",
+      "number": "7.6",
+      "question_text": "Do you accept the NHS Standard Contract as the basis for this agreement? (Yes/No)",
+      "concept_id": "co_yn_nhs_contract",
+      "response_type": "yes_no",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "8. Social value",
+      "number": "8.1",
+      "question_text": "Set out your organisation's net zero commitment and summarise your published Carbon Reduction Plan.",
+      "concept_id": "sv_carbon",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Describe your commitment to achieving net zero and provide details of your Carbon Reduction Plan.",
+          "concept_id": "sv_carbon"
+        },
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "Set out your organisation's net zero commitment and summarise your published Carbon Reduction Plan.",
+          "concept_id": "sv_carbon"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "8. Social value",
+      "number": "8.2",
+      "question_text": "What commitments do you make to local employment, apprenticeships and skills development as part of this contract?",
+      "concept_id": "sv_local_employment",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_harbourside_fT_2025.docx",
+          "question_text": "What commitments do you make to local employment, apprenticeships and skills development as part of this contract?",
+          "concept_id": "sv_local_employment"
+        }
+      ],
+      "held_out_answer": null
+    },
+    {
+      "section": "8. Social value",
+      "number": "8.3",
+      "question_text": "Describe the steps your organisation takes to ensure there is no modern slavery in its business or supply chain.",
+      "concept_id": "sv_modern_slavery",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "8. Social value",
+      "number": "8.4",
+      "question_text": "Describe how you will support the health and wellbeing of your workforce and contribute to reducing health inequalities in the Trust's area.",
+      "concept_id": "sv_wellbeing",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "9. Company and experience",
+      "number": "9.1",
+      "question_text": "Describe your organisation: legal form, company registration, headcount and experience of comparable NHS deployments.",
+      "concept_id": "cx_company_overview",
+      "response_type": "free_text",
+      "label": "counterpart",
+      "counterparts": [
+        {
+          "submission_filename": "past_submission_westmoor_icb_2024.docx",
+          "question_text": "Provide an overview of your organisation, including its legal status, size and relevant experience of delivering similar solutions to NHS organisations.",
+          "concept_id": "cx_company_overview"
+        }
+      ],
+      "held_out_answer": "Northlight Health Informatics Ltd is a private limited company registered in England and Wales under company number 11482930, founded in 2016 and based at Riverside Business Park, Sheffield. We employ 94 staff, of whom more than half work in product engineering and clinical safety. Our sole product is Northlight Connect, a cloud-hosted clinical communication, task management and referral platform, which is in live use across eleven NHS trusts and integrated care systems.\n\nRecent deployments include a community trust where referral turnaround fell by a third within six months, and an acute trust where handover incidents reported to the safety team halved in the first year. We hold public liability insurance of £10 million, professional indemnity insurance of £5 million, employer's liability insurance of £10 million and cyber insurance of £5 million."
+    },
+    {
+      "section": "9. Company and experience",
+      "number": "9.2",
+      "question_text": "Do you hold, or will you hold before contract award, employer's liability insurance of at least £10 million and public liability insurance of at least £10 million? (Yes/No)",
+      "concept_id": "cx_yn_insurance",
+      "response_type": "yes_no",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "9. Company and experience",
+      "number": "9.3",
+      "question_text": "Provide details of your financial standing, including turnover for the last two financial years and confirmation that audited accounts are available on request.",
+      "concept_id": "cx_financial_standing",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    },
+    {
+      "section": "9. Company and experience",
+      "number": "9.4",
+      "question_text": "Provide details of any subcontractors or consortium members you propose to use in delivering this contract and the proportion of the contract each will deliver.",
+      "concept_id": "cx_subcontractors",
+      "response_type": "free_text",
+      "label": "new",
+      "counterparts": [],
+      "held_out_answer": null
+    }
+  ]
+}

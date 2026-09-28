@@ -1,0 +1,416 @@
+{
+  "generated_at": "2026-09-28T15:39:17+00:00",
+  "seed": 0,
+  "mode": "template",
+  "supplier": "Northlight Health Informatics Ltd",
+  "note": "Synthetic data. Every organisation, person, certificate and reference in these files is invented for evaluation; hackathon numbers derived from them must be labelled as synthetic.",
+  "documents": [
+    {
+      "filename": "past_submission_westmoor_icb_2024.docx",
+      "role": "past_submission",
+      "key": "westmoor_2024",
+      "layout": "adjacent_cells",
+      "expected": {
+        "doc_type": "past_submission",
+        "buyer": "NHS Westmoor Integrated Care Board",
+        "submission_date": "2024-06-14",
+        "effective_date": "2024-06-14",
+        "pair_count": 14
+      },
+      "pairs": [
+        {
+          "number": "1.1",
+          "section": "Clinical safety",
+          "concept_id": "cs_dcb0129",
+          "question_text": "Describe how your organisation complies with DCB0129 and how the clinical safety case for the proposed solution is maintained.",
+          "answer_word_count": 179
+        },
+        {
+          "number": "1.2",
+          "section": "Clinical safety",
+          "concept_id": "cs_officer",
+          "question_text": "Provide the name and qualifications of your Clinical Safety Officer and describe their role in the delivery of this contract.",
+          "answer_word_count": 118
+        },
+        {
+          "number": "2.1",
+          "section": "Information governance",
+          "concept_id": "ig_dspt",
+          "question_text": "Confirm your organisation's current Data Security and Protection Toolkit status and describe how compliance is maintained.",
+          "answer_word_count": 103
+        },
+        {
+          "number": "2.2",
+          "section": "Information governance",
+          "concept_id": "ig_dpo",
+          "question_text": "Provide details of your Data Protection Officer and describe your information governance arrangements.",
+          "answer_word_count": 113
+        },
+        {
+          "number": "3.1",
+          "section": "Information security",
+          "concept_id": "is_iso27001",
+          "question_text": "Confirm whether your organisation holds ISO/IEC 27001 certification and provide the certificate number, scope and date of issue.",
+          "answer_word_count": 85
+        },
+        {
+          "number": "3.2",
+          "section": "Information security",
+          "concept_id": "is_ce_plus",
+          "question_text": "Confirm whether you hold Cyber Essentials Plus certification and provide the certificate number and expiry date.",
+          "answer_word_count": 76
+        },
+        {
+          "number": "3.3",
+          "section": "Information security",
+          "concept_id": "is_access_control",
+          "question_text": "Describe how user access to the solution is controlled, including authentication, role-based access and audit of access to patient records.",
+          "answer_word_count": 124
+        },
+        {
+          "number": "4.1",
+          "section": "Interoperability",
+          "concept_id": "io_standards",
+          "question_text": "Describe the interoperability standards the solution supports and its integration with NHS national services.",
+          "answer_word_count": 90
+        },
+        {
+          "number": "4.2",
+          "section": "Interoperability",
+          "concept_id": "io_integration_epr",
+          "question_text": "Describe how the solution will integrate with the Trust's electronic patient record and patient administration system, including your approach to integration testing.",
+          "answer_word_count": 97
+        },
+        {
+          "number": "5.1",
+          "section": "Implementation and onboarding",
+          "concept_id": "im_plan",
+          "question_text": "Provide an outline implementation plan showing the key phases, milestones and timescales from contract award to go-live.",
+          "answer_word_count": 140
+        },
+        {
+          "number": "6.1",
+          "section": "Training and support",
+          "concept_id": "tr_support_sla",
+          "question_text": "Describe your support arrangements and service levels, including service desk hours, incident priority definitions and response and resolution targets.",
+          "answer_word_count": 159
+        },
+        {
+          "number": "7.1",
+          "section": "Commercial",
+          "concept_id": "co_pricing_model",
+          "question_text": "Describe your commercial model, including how charges are structured, the proposed contract term and any dependencies on user or bed numbers. Do not include prices in this response.",
+          "answer_word_count": 104
+        },
+        {
+          "number": "8.1",
+          "section": "Social value",
+          "concept_id": "sv_carbon",
+          "question_text": "Describe your commitment to achieving net zero and provide details of your Carbon Reduction Plan.",
+          "answer_word_count": 106
+        },
+        {
+          "number": "9.1",
+          "section": "Company and experience",
+          "concept_id": "cx_company_overview",
+          "question_text": "Provide an overview of your organisation, including its legal status, size and relevant experience of delivering similar solutions to NHS organisations.",
+          "answer_word_count": 128
+        }
+      ],
+      "near_identical_to": [],
+      "writer": "template",
+      "model": null,
+      "prompt_version": null
+    },
+    {
+      "filename": "past_submission_harbourside_fT_2025.docx",
+      "role": "past_submission",
+      "key": "harbourside_2025",
+      "layout": "heading_answer",
+      "expected": {
+        "doc_type": "past_submission",
+        "buyer": "Harbourside University Hospitals NHS Foundation Trust",
+        "submission_date": "2025-02-21",
+        "effective_date": "2025-02-21",
+        "pair_count": 14
+      },
+      "pairs": [
+        {
+          "number": "1.1",
+          "section": "Clinical safety",
+          "concept_id": "cs_dcb0129",
+          "question_text": "Please describe your compliance with the DCB0129 clinical risk management standard, including the clinical safety case for the product offered.",
+          "answer_word_count": 178
+        },
+        {
+          "number": "1.2",
+          "section": "Clinical safety",
+          "concept_id": "cs_hazard_log",
+          "question_text": "Explain your hazard log process and how clinical safety incidents are reported, investigated and resolved.",
+          "answer_word_count": 130
+        },
+        {
+          "number": "2.1",
+          "section": "Information governance",
+          "concept_id": "ig_dspt",
+          "question_text": "Please state your latest Data Security and Protection Toolkit assessment outcome and explain how you keep it current.",
+          "answer_word_count": 100
+        },
+        {
+          "number": "2.2",
+          "section": "Information governance",
+          "concept_id": "ig_dpia",
+          "question_text": "How will you help us complete our Data Protection Impact Assessment, and what controller and processor roles apply to the proposed service?",
+          "answer_word_count": 96
+        },
+        {
+          "number": "2.3",
+          "section": "Information governance",
+          "concept_id": "ig_data_residency",
+          "question_text": "State the location of hosting and processing for all personal data and confirm whether any transfer outside the United Kingdom occurs.",
+          "answer_word_count": 81
+        },
+        {
+          "number": "3.1",
+          "section": "Information security",
+          "concept_id": "is_iso27001",
+          "question_text": "Do you hold ISO 27001 certification? Provide the certificate number, the certifying body, the scope and the date of issue.",
+          "answer_word_count": 84
+        },
+        {
+          "number": "3.2",
+          "section": "Information security",
+          "concept_id": "is_pen_testing",
+          "question_text": "How often is the solution penetration tested, by whom, and how quickly are vulnerabilities remediated?",
+          "answer_word_count": 78
+        },
+        {
+          "number": "4.1",
+          "section": "Interoperability",
+          "concept_id": "io_standards",
+          "question_text": "Which open standards does the solution support, and how does it connect to national NHS services such as the Personal Demographics Service?",
+          "answer_word_count": 88
+        },
+        {
+          "number": "4.2",
+          "section": "Interoperability",
+          "concept_id": "io_snomed",
+          "question_text": "How does the solution use SNOMED CT, dm+d and the NHS number to record and exchange clinical information?",
+          "answer_word_count": 64
+        },
+        {
+          "number": "5.1",
+          "section": "Implementation and onboarding",
+          "concept_id": "im_governance",
+          "question_text": "How will the implementation be governed, and how will risks and issues be managed and escalated?",
+          "answer_word_count": 99
+        },
+        {
+          "number": "6.1",
+          "section": "Training and support",
+          "concept_id": "tr_training",
+          "question_text": "How will you train our staff before go-live, and what training is available afterwards for new starters?",
+          "answer_word_count": 90
+        },
+        {
+          "number": "7.1",
+          "section": "Commercial",
+          "concept_id": "co_contract_exit",
+          "question_text": "What exit management support do you provide, and how will data be returned or transferred to a successor supplier?",
+          "answer_word_count": 95
+        },
+        {
+          "number": "8.1",
+          "section": "Social value",
+          "concept_id": "sv_carbon",
+          "question_text": "Set out your organisation's net zero commitment and summarise your published Carbon Reduction Plan.",
+          "answer_word_count": 101
+        },
+        {
+          "number": "8.2",
+          "section": "Social value",
+          "concept_id": "sv_local_employment",
+          "question_text": "What commitments do you make to local employment, apprenticeships and skills development as part of this contract?",
+          "answer_word_count": 85
+        }
+      ],
+      "near_identical_to": [
+        {
+          "concept_id": "cs_dcb0129",
+          "submission_filename": "past_submission_westmoor_icb_2024.docx"
+        },
+        {
+          "concept_id": "ig_dspt",
+          "submission_filename": "past_submission_westmoor_icb_2024.docx"
+        },
+        {
+          "concept_id": "is_iso27001",
+          "submission_filename": "past_submission_westmoor_icb_2024.docx"
+        },
+        {
+          "concept_id": "io_standards",
+          "submission_filename": "past_submission_westmoor_icb_2024.docx"
+        },
+        {
+          "concept_id": "sv_carbon",
+          "submission_filename": "past_submission_westmoor_icb_2024.docx"
+        }
+      ],
+      "writer": "template",
+      "model": null,
+      "prompt_version": null
+    },
+    {
+      "filename": "past_submission_northern_fells_2025_heldout.docx",
+      "role": "held_out_submission",
+      "key": "northern_fells_2025",
+      "layout": "numbered_form",
+      "expected": {
+        "doc_type": "past_submission",
+        "buyer": "Northern Fells Community Health NHS Trust",
+        "submission_date": "2025-07-18",
+        "effective_date": "2025-07-18",
+        "pair_count": 14
+      },
+      "pairs": [
+        {
+          "number": "1.1",
+          "section": "Clinical safety",
+          "concept_id": "cs_dcb0129",
+          "question_text": "Explain how clinical risk is managed for the solution in line with DCB0129 and how the clinical safety case report is kept current.",
+          "answer_word_count": 184
+        },
+        {
+          "number": "1.2",
+          "section": "Clinical safety",
+          "concept_id": "cs_officer",
+          "question_text": "Provide the name and qualifications of your Clinical Safety Officer and describe their role in the delivery of this contract.",
+          "answer_word_count": 118
+        },
+        {
+          "number": "1.3",
+          "section": "Clinical safety",
+          "concept_id": "cs_hazard_log",
+          "question_text": "Describe how hazards are identified, recorded and controlled throughout the life of the solution, and how clinical safety incidents are managed.",
+          "answer_word_count": 136
+        },
+        {
+          "number": "1.4",
+          "section": "Clinical safety",
+          "concept_id": "cs_dcb0160_support",
+          "question_text": "Describe how you will support the Trust to discharge its own obligations under DCB0160 during deployment and in live service.",
+          "answer_word_count": 106
+        },
+        {
+          "number": "2.1",
+          "section": "Information governance",
+          "concept_id": "ig_dspt",
+          "question_text": "What is your Data Security and Protection Toolkit status, and how do you maintain it year on year?",
+          "answer_word_count": 103
+        },
+        {
+          "number": "2.2",
+          "section": "Information governance",
+          "concept_id": "ig_dpo",
+          "question_text": "Provide details of your Data Protection Officer and describe your information governance arrangements.",
+          "answer_word_count": 117
+        },
+        {
+          "number": "2.3",
+          "section": "Information governance",
+          "concept_id": "ig_retention",
+          "question_text": "Describe your data retention and deletion arrangements, including what happens to Trust data at the end of the contract.",
+          "answer_word_count": 102
+        },
+        {
+          "number": "3.1",
+          "section": "Information security",
+          "concept_id": "is_iso27001",
+          "question_text": "Please provide details of your ISO/IEC 27001 certification, including number, scope and issue date.",
+          "answer_word_count": 83
+        },
+        {
+          "number": "3.2",
+          "section": "Information security",
+          "concept_id": "is_ce_plus",
+          "question_text": "Confirm whether you hold Cyber Essentials Plus certification and provide the certificate number and expiry date.",
+          "answer_word_count": 85
+        },
+        {
+          "number": "3.3",
+          "section": "Information security",
+          "concept_id": "is_access_control",
+          "question_text": "Describe how user access to the solution is controlled, including authentication, role-based access and audit of access to patient records.",
+          "answer_word_count": 116
+        },
+        {
+          "number": "4.1",
+          "section": "Interoperability",
+          "concept_id": "io_integration_epr",
+          "question_text": "Describe how the solution will integrate with the Trust's electronic patient record and patient administration system, including your approach to integration testing.",
+          "answer_word_count": 101
+        },
+        {
+          "number": "5.1",
+          "section": "Implementation and onboarding",
+          "concept_id": "im_plan",
+          "question_text": "Set out your implementation plan from award to live operation, with phases and indicative durations.",
+          "answer_word_count": 139
+        },
+        {
+          "number": "6.1",
+          "section": "Training and support",
+          "concept_id": "tr_support_sla",
+          "question_text": "Describe your support arrangements and service levels, including service desk hours, incident priority definitions and response and resolution targets.",
+          "answer_word_count": 165
+        },
+        {
+          "number": "7.1",
+          "section": "Company and experience",
+          "concept_id": "cx_company_overview",
+          "question_text": "Give a brief profile of your company, including registration details, number of staff and relevant NHS experience.",
+          "answer_word_count": 131
+        }
+      ],
+      "near_identical_to": [],
+      "writer": "template",
+      "model": null,
+      "prompt_version": null
+    },
+    {
+      "filename": "reference_iso27001_certificate_2024.docx",
+      "role": "reference",
+      "key": "iso_2024",
+      "expected": {
+        "doc_type": "reference",
+        "doc_kind": "iso_27001",
+        "effective_date": "2024-03-12",
+        "effective_date_text": "12 March 2024",
+        "certificate_number": "NHI-27001-0417"
+      }
+    },
+    {
+      "filename": "reference_iso27001_certificate_2025.docx",
+      "role": "reference",
+      "key": "iso_2025",
+      "expected": {
+        "doc_type": "reference",
+        "doc_kind": "iso_27001",
+        "effective_date": "2025-03-09",
+        "effective_date_text": "9 March 2025",
+        "certificate_number": "NHI-27001-0582"
+      }
+    },
+    {
+      "filename": "question_pack_northern_fells_2025.xlsx",
+      "role": "question_pack",
+      "expected": {
+        "doc_type": "tender_document",
+        "tender_doc_kind": "question_pack",
+        "question_count": 43,
+        "buyer": "Northern Fells Community Health NHS Trust"
+      }
+    }
+  ],
+  "ground_truth": "ground_truth.json"
+}

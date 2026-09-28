@@ -1,0 +1,16 @@
+# The build context for backend/Dockerfile is the repository root (docker-compose.yml), so
+# everything not listed here is sent to the Docker daemon on every build. Only pyproject.toml,
+# backend/ and eval/ are COPYed into the image. Keep eval/data (compose pins
+# eval/data/fixtures/fixture_document.json for the seed) and the eval/reports directory itself
+# (the harness writes into it); drop only the per-run reports.
+.venv
+.git
+.devdb
+storage
+.env
+.pytest_cache
+.ruff_cache
+**/__pycache__
+eval/reports/*.md
+eval/reports/*.json
+frontend
