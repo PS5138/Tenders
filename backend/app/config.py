@@ -183,6 +183,8 @@ class Settings(BaseSettings):
     default_org_id: uuid.UUID = DEFAULT_ORG_ID
     fixture_document_path: Path = REPO_ROOT / "eval" / "data" / "fixtures" / "fixture_document.json"
     log_level: str = "INFO"
+    service_secret: str | None = None
+    synthetic_demo: bool = False
     # Browser origins allowed to call the API (the Next.js front end), comma-separated and
     # never "*": each environment lists its own origins so the unauthenticated API is not
     # callable from any page. Read by ``app.main.cors_origins``.
@@ -299,6 +301,12 @@ def check_provider_configuration(settings: Settings) -> None:
     as a start-up failure with a plain message, not as the first ingest job failing three times.
     Builds no client and touches no network; the ``fake`` providers always pass.
     """
+    if settings.synthetic_demo and (
+        settings.llm_provider != "fake" or settings.embedding_provider != "fake"
+    ):
+        raise ProviderConfigurationError("SYNTHETIC_DEMO requires both providers to be fake.")
+    if settings.service_secret is not None and len(settings.service_secret) < 32:
+        raise ProviderConfigurationError("SERVICE_SECRET must contain at least 32 characters.")
     if settings.llm_provider == "anthropic" and settings.anthropic_api_key is None:
         if not any(os.environ.get(name) for name in _ANTHROPIC_ALTERNATIVE_ENV):
             raise ProviderConfigurationError(

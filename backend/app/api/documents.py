@@ -184,6 +184,21 @@ def store_upload(org_id: uuid.UUID, document_id: uuid.UUID, filename: str, data:
     Uses owner A's ``app.ingest.storage.save_upload(data, filename, *, document_id, org_id)``
     when it exists so both upload endpoints store files the same way.
     """
+    if get_settings().synthetic_demo:
+        import hashlib
+
+        from app.config import REPO_ROOT
+
+        digest = hashlib.sha256(data).digest()
+        allowed = any(
+            hashlib.sha256(candidate.read_bytes()).digest() == digest
+            for candidate in (REPO_ROOT / "eval" / "data").glob("*")
+            if candidate.suffix in {".docx", ".xlsx", ".pdf"}
+        )
+        if not allowed:
+            raise HTTPException(
+                422, "Synthetic demo mode accepts only the supplied synthetic files."
+            )
     try:
         from app.ingest.storage import save_upload
     except ImportError:
@@ -218,6 +233,18 @@ def _unpaired_item(item: KnowledgeItem) -> UnpairedItem:
 # --- Routes ---------------------------------------------------------------------------------
 
 
+@router.get("/documents/{document_id}/file")
+def original_file(document_id: uuid.UUID, db: DbSession, org_id: OrgId):
+    from fastapi.responses import FileResponse
+
+    document = _load_document(db, document_id, org_id)
+    root = Path(get_settings().storage_path).resolve()
+    target = Path(document.storage_path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        raise HTTPException(404, "Original file not found.")
+    return FileResponse(target, filename=document.filename)
+
+
 @router.post("/documents", status_code=status.HTTP_202_ACCEPTED, response_model=DocumentWithJob)
 def upload_document(
     db: DbSession,
@@ -234,9 +261,7 @@ def upload_document(
     file.file.seek(0)
     data = file.file.read()
     if not data:
-        raise HTTPException(
-            UNPROCESSABLE, detail="The uploaded file is empty."
-        )
+        raise HTTPException(UNPROCESSABLE, detail="The uploaded file is empty.")
     filename = file.filename or "upload"
     document_id = uuid.uuid4()
     storage_path = store_upload(org_id, document_id, filename, data)

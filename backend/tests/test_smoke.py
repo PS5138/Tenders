@@ -27,7 +27,10 @@ STORED_STATUSES = {"supported", "weak", "unsupported", "human_authored", "connec
 async def test_health(app_client: httpx.AsyncClient) -> None:
     response = await app_client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok", "llm_provider": "fake", "embedding_provider": "fake",
+        "service_secret_enabled": False, "synthetic_demo": False,
+    }
 
 
 def test_migrations_applied_and_vector_extension_present(db_session: Session) -> None:

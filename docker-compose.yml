@@ -1,88 +1,184 @@
-# Single `docker compose up` starts Postgres with pgvector, applies migrations and the seed,
-# then starts the API and the worker from one image. Nothing is downloaded at start-up:
-# Docling's weights are baked into the image at build time.
-#
-# The image is built once, by `migrate`, and tagged `tenders-backend`; `api` and `worker`
-# reuse the tag (they depend on `migrate`, and compose builds every buildable service before it
-# looks for missing images). The build context is the repository root, trimmed by /.dockerignore.
+# Development integration stack. Only Next.js is published; fake providers by default.
+# Private API authenticated by a shared service secret. The default is for local synthetic development only.
+name: ten
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://postgres@db:5432/tenders
+  STORAGE_PATH: /data/storage
+  DOCLING_ARTIFACTS_PATH: /opt/docling-models
+  FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
+  SYNTHETIC_DEMO: ${SYNTHETIC_DEMO:-true}
+  SERVICE_SECRET: ${BACKEND_SERVICE_SECRET:-local-synthetic-only-replace-before-hosting}
+
+x-frontend: &frontend
+  build:
+    context: ./frontend
+    target: local
+  image: ten-frontend-local
+  volumes:
+    - config:/config
+  environment: &frontend-env
+    APP_MODE: development
+    APP_URL: ${APP_URL:-http://localhost:3000}
+    NEXT_TELEMETRY_DISABLED: "1"
+    # Account-menu switch between the fictional test accounts. Development stacks only;
+    # the app ignores it in any other APP_MODE. Set to false to hide it.
+    DEMO_USER_SWITCH: ${DEMO_USER_SWITCH:-true}
+    SUPABASE_URL: http://gateway:54321
+    DATABASE_URL: postgres://postgres@db:5432/ten_frontend
+    BACKEND_URL: http://api:8000
+    BACKEND_SERVICE_SECRET: ${BACKEND_SERVICE_SECRET:-local-synthetic-only-replace-before-hosting}
+
 services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: tenders
-      POSTGRES_PASSWORD: tenders
+      POSTGRES_USER: postgres
       POSTGRES_DB: tenders
-    ports:
-      # Loopback only: the host-side route for the harness or a locally run API
-      # (.env.example documents localhost:5432). Set TENDERS_DB_PORT in the repo-root .env when a
-      # local Postgres already holds 5432, and use that port in DATABASE_URL from the host.
-      - "127.0.0.1:${TENDERS_DB_PORT:-5432}:5432"
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./frontend/docker/init-frontend-db.sql:/docker-entrypoint-initdb.d/00-frontend.sql:ro
+      - ./frontend/scripts/local/bootstrap.sql:/opt/ten-bootstrap.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tenders -d tenders"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "tenders"]
+      interval: 2s
+      retries: 60
 
   migrate:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    image: tenders-backend
+    image: ten-backend-local
     command: sh -c "alembic upgrade head && python -m app.db.seed"
     env_file:
       - path: .env
         required: false
-    environment:
-      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
-      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    environment: *backend-env
     depends_on:
-      db:
-        condition: service_healthy
+      db: { condition: service_healthy }
 
   api:
-    image: tenders-backend
+    image: ten-backend-local
+    # Built by `migrate`; never look for it on Docker Hub.
+    pull_policy: never
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
-    ports:
-      - "8000:8000"
     env_file:
       - path: .env
         required: false
-    environment:
-      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
-      STORAGE_PATH: /data/storage
-      # Baked into the image at build time (backend/Dockerfile); pinned here so a local .env
-      # written for a non-Docker run cannot point the containers elsewhere.
-      DOCLING_ARTIFACTS_PATH: /opt/docling-models
-      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    environment: *backend-env
     volumes:
       - storage:/data/storage
-    restart: unless-stopped
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/health', headers={'Authorization': 'Bearer '+os.environ['SERVICE_SECRET']}))"]
+      interval: 2s
+      retries: 60
+    restart: unless-stopped
 
   worker:
-    image: tenders-backend
+    image: ten-backend-local
+    # Built by `migrate`; never look for it on Docker Hub.
+    pull_policy: never
     command: python -m app.worker
     env_file:
       - path: .env
         required: false
-    environment:
-      DATABASE_URL: postgresql+psycopg://tenders:tenders@db:5432/tenders
-      STORAGE_PATH: /data/storage
-      # Baked into the image at build time (backend/Dockerfile); pinned here so a local .env
-      # written for a non-Docker run cannot point the containers elsewhere.
-      DOCLING_ARTIFACTS_PATH: /opt/docling-models
-      FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
+    environment: *backend-env
     volumes:
       - storage:/data/storage
-    restart: unless-stopped
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  config:
+    <<: *frontend
+    command: ["node", "docker/demo-config.mjs"]
+    healthcheck: { disable: true }
+
+  auth:
+    image: supabase/gotrue:v2.180.0
+    depends_on:
+      db: { condition: service_healthy }
+      config: { condition: service_completed_successfully }
+    volumes:
+      - config:/config:ro
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: "9999"
+      API_EXTERNAL_URL: ${APP_URL:-http://localhost:3000}
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://supabase_auth_admin:local-auth-admin@db:5432/ten_frontend
+      GOTRUE_SITE_URL: ${APP_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${APP_URL:-http://localhost:3000}/**
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_LOG_LEVEL: warn
+    entrypoint: ["sh", "-c"]
+    command: ['set -a && . /config/demo.env && set +a && export GOTRUE_JWT_SECRET="$$LOCAL_JWT_SECRET" && auth migrate && exec auth serve']
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9999/health"]
+      interval: 2s
+      retries: 90
+    restart: unless-stopped
+
+  gateway:
+    <<: *frontend
+    command: ["node", "scripts/local/gateway.mjs"]
+    environment:
+      LOCAL_GATEWAY_HOST: 0.0.0.0
+      LOCAL_AUTH_HOST: auth
+      LOCAL_AUTH_PORT: "9999"
+    depends_on:
+      auth: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:54321/auth/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      retries: 60
+    restart: unless-stopped
+
+  frontend-migrate:
+    <<: *frontend
+    command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/migrate.ts"]
+    depends_on:
+      auth: { condition: service_healthy }
+    healthcheck: { disable: true }
+
+  frontend-seed:
+    <<: *frontend
+    command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/seed-backend.ts"]
+    volumes:
+      - config:/config
+      - ./eval/data:/app/backend-fixtures:ro
+    environment:
+      <<: *frontend-env
+      BACKEND_FIXTURES_DIR: /app/backend-fixtures
+    depends_on:
+      frontend-migrate: { condition: service_completed_successfully }
+      worker: { condition: service_started }
+      gateway: { condition: service_healthy }
+      api: { condition: service_healthy }
+    healthcheck: { disable: true }
+
+  web:
+    <<: *frontend
+    command: ["node", "web/server.js"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      frontend-seed: { condition: service_completed_successfully }
+      gateway: { condition: service_healthy }
+      api: { condition: service_healthy }
+    restart: unless-stopped
 
 volumes:
   pgdata:
   storage:
+  config:

@@ -24,3 +24,12 @@ eval/reports/*.json
 
 # Local development Postgres started by backend/scripts/dev_db.py
 .devdb/
+
+# Combined checkout
+node_modules/
+.pnpm-store/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+/private/
+.DS_Store

@@ -387,6 +387,10 @@ class FixtureAnswerResponse(ApiModel):
 
 class HealthResponse(ApiModel):
     status: Literal["ok"]
+    llm_provider: str
+    embedding_provider: str
+    service_secret_enabled: bool
+    synthetic_demo: bool
 
 
 class ErrorDetail(ApiModel):
