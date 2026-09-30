@@ -242,6 +242,10 @@ def get_llm() -> LLMClient:
     """The process-wide client, chosen by ``LLM_PROVIDER``. ``reset_llm()`` rebuilds it."""
     settings = get_settings()
     if settings.llm_provider == "fake":
+        if settings.synthetic_demo:
+            from app.llm.synthetic import HeuristicFakeLLM
+
+            return HeuristicFakeLLM()
         return FakeLLM()
     if settings.llm_provider == "anthropic":
         return AnthropicLLM(api_key=settings.anthropic_api_key)

@@ -255,3 +255,27 @@ The harness writes `../eval/reports/<timestamp>.md` (and a `.json` twin) per run
 ## Layout
 
 See the repository layout in `../CLAUDE.md`. Module owners register job handlers with `app.jobs.register(kind)`; `app/worker.py` imports the handler modules by name at start-up. Alembic migrations live in `alembic/versions/`; enumerations are strings guarded by CHECK constraints, so adding a value is a migration that recreates the constraint (see `0002`).
+
+## Authenticated frontend integration
+
+The combined stack keeps the API private. `SERVICE_SECRET` (32+ characters) enables a
+constant-time bearer-secret check on every endpoint, including health and OpenAPI. This is
+service authentication only; Next.js owns user sessions and business membership.
+
+`GET /health` now also reports `llm_provider`, `embedding_provider`, `synthetic_demo` and
+`service_secret_enabled`. The frontend refuses demo startup unless both providers are live
+and service protection is enabled.
+
+`POST /organisations` accepts `{id, name}` and initialises the default topic taxonomy.
+The caller supplies a stable UUID, so retrying the same request is idempotent; reusing an ID
+with a different name returns 409. This is an operator/server provisioning path and is not
+included in the browser proxy allow-list.
+
+`GET /documents/{id}/file` returns the original file after the same organisation check as
+the document resource. Missing files and paths outside the configured storage root return
+404. Downloads carry the original filename.
+
+`SYNTHETIC_DEMO=true` explicitly selects the heuristic provider previously used only by the
+end-to-end tests. Both providers must be `fake`. Uploads are restricted by checksum to the
+files in `eval/data`; arbitrary and real documents are rejected. This mode proves plumbing,
+not answer quality. Leave it off for normal tests and live deployments.

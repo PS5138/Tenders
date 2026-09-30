@@ -1,0 +1,13 @@
+.git
+.next
+.local
+node_modules
+.env*
+!.env.example
+private
+fixtures/ai-contract
+tests
+test-results
+playwright-report
+tsconfig.tsbuildinfo
+*.log

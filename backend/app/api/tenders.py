@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, delete, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Actor, DbSession, OrgId
@@ -32,7 +32,7 @@ from app.api.schemas import (
 )
 from app.config import get_settings
 from app.db import enums as e
-from app.db.models import Answer, Document, Question, Tender, Thread, utcnow
+from app.db.models import Answer, Document, Event, Job, Question, Tender, Thread, utcnow
 from app.jobs import enqueue
 from app.review.events import record_event
 from app.review.support import summarise_support
@@ -52,14 +52,35 @@ class TenderCreate(BaseModel):
 
 
 class TenderPatch(BaseModel):
-    """Fields are optional so a PATCH sends only what changes. ``outcome`` may be omitted but
-    never null: the column is NOT NULL and a tender with no outcome yet is ``pending``. The
-    nullable columns (``outcome_notes``, ``regime``, ``is_framework``) accept null as a clear."""
+    """Fields are optional so a PATCH sends only what changes. ``outcome`` and ``name`` may be
+    omitted but never null: both columns are NOT NULL and a tender with no outcome yet is
+    ``pending``. The nullable columns (``buyer``, ``deadline``, ``outcome_notes``, ``regime``,
+    ``is_framework``) accept null as a clear. ``status`` archives (``archived``) or restores
+    (``open``) a tender; a restored tender that was submitted returns to ``submitted``, and only
+    ``POST /tenders/{id}/submit`` submits."""
 
+    name: str | None = Field(default=None, min_length=1, max_length=512)
+    buyer: str | None = Field(default=None, max_length=256)
+    deadline: datetime | None = None
+    status: Literal["open", "archived"] | None = None
     outcome: Literal["pending", "won", "lost", "unknown"] | None = None
     outcome_notes: str | None = None
     regime: Literal["procurement_act", "psr", "pcr_2015", "other"] | None = None
     is_framework: bool | None = None
+
+    @field_validator("name", "status")
+    @classmethod
+    def _not_null(cls, value: str | None) -> str | None:
+        if value is None:
+            raise ValueError("this field cannot be null.")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("name cannot be blank.")
+        return value.strip()
 
     @field_validator("outcome")
     @classmethod
@@ -256,8 +277,17 @@ def patch_tender(
     tender = _get_tender(db, tender_id, org_id)
     changes = body.model_dump(exclude_unset=True)
     previous_outcome = tender.outcome
+    requested_status = changes.pop("status", None)
+    if "buyer" in changes and changes["buyer"] is not None:
+        changes["buyer"] = changes["buyer"].strip() or None
     for field_name, value in changes.items():
         setattr(tender, field_name, value)
+    if requested_status == "archived":
+        tender.status = e.TenderStatus.ARCHIVED.value
+    elif requested_status == "open":
+        tender.status = (
+            e.TenderStatus.SUBMITTED.value if tender.submitted_at else e.TenderStatus.OPEN.value
+        )
     db.flush()
     if "outcome" in changes and tender.outcome != previous_outcome:
         document = _retag_promotion_document(db, tender)
@@ -278,6 +308,63 @@ def patch_tender(
     db.commit()
     db.refresh(tender)
     return _detail(db, tender)
+
+
+@router.delete("/{tender_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Actor) -> Response:
+    """Delete a tender that was never submitted, with its documents, questions, answers,
+    threads and their events. A submitted tender is a record (its approved answers may be in the
+    library) and is archived instead: 409. Refused with 409 while a job or a draft for the
+    tender is still running, so nothing writes into rows being removed."""
+    tender = _get_tender(db, tender_id, org_id)
+    if tender.submitted_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="A submitted tender is kept as a record. Archive it instead.",
+        )
+    running = db.scalar(
+        select(func.count())
+        .select_from(Job)
+        .where(
+            Job.org_id == org_id,
+            Job.status.in_([e.JobStatus.QUEUED.value, e.JobStatus.RUNNING.value]),
+            Job.payload["tender_id"].astext == str(tender.id),
+        )
+    )
+    question_ids = list(db.scalars(select(Question.id).where(Question.tender_id == tender.id)))
+    drafting = False
+    try:
+        from app.generate.runner import draft_in_progress as drafting_now
+
+        drafting = any(drafting_now(question_id) for question_id in question_ids)
+    except ImportError:
+        pass
+    if running or drafting:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="This tender is still being processed. Try again when processing finishes.",
+        )
+    answer_ids = (
+        list(db.scalars(select(Answer.id).where(Answer.question_id.in_(question_ids))))
+        if question_ids
+        else []
+    )
+    documents = list(db.scalars(select(Document).where(Document.tender_id == tender.id)))
+    paths = [document.storage_path for document in documents if document.storage_path]
+    entity_ids = [tender.id, *question_ids, *answer_ids, *(d.id for d in documents)]
+    db.execute(delete(Event).where(Event.org_id == org_id, Event.entity_id.in_(entity_ids)))
+    # Documents, sections, questions, answers, evidence, comments, threads and messages go by
+    # ON DELETE CASCADE from the tender. A SQL delete, so the ORM does not try to detach
+    # already-loaded children by nulling their tender_id first.
+    db.execute(delete(Tender).where(Tender.id == tender.id, Tender.org_id == org_id))
+    db.commit()
+    db.expunge_all()
+    root = Path(get_settings().storage_path).resolve()
+    for stored in paths:
+        target = Path(stored).resolve()
+        if target.is_relative_to(root) and target.is_file():
+            target.unlink(missing_ok=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- Tender documents -----------------------------------------------------------------------------

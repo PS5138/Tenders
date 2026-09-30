@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import (
     answers,
@@ -12,6 +15,7 @@ from app.api import (
     fixtures,
     jobs,
     library,
+    organisations,
     questions,
     sections,
     tenders,
@@ -22,6 +26,7 @@ from app.api.schemas import HealthResponse
 from app.config import check_provider_configuration, get_settings
 
 ROUTERS = (
+    organisations.router,
     documents.router,
     sections.router,
     library.router,
@@ -66,6 +71,18 @@ def create_app() -> FastAPI:
         "X-Org-Id defaults to the seeded organisation.",
         dependencies=[Depends(actor_guard)],
     )
+
+    @app.middleware("http")
+    async def service_guard(request, call_next):
+        secret = get_settings().service_secret
+        if secret and not secrets.compare_digest(
+            request.headers.get("authorization", "").encode(), f"Bearer {secret}".encode()
+        ):
+            return JSONResponse(
+                {"detail": "A valid service credential is required."}, status_code=401
+            )
+        return await call_next(request)
+
     # No cookies are used, so credentials stay off. Preflights are answered by the middleware
     # and never reach ``actor_guard``; the 400 for a missing X-Actor carries the CORS headers
     # so the front end can read the error body.
@@ -79,7 +96,14 @@ def create_app() -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
-        return HealthResponse(status="ok")
+        settings = get_settings()
+        return HealthResponse(
+            status="ok",
+            llm_provider=settings.llm_provider,
+            embedding_provider=settings.embedding_provider,
+            service_secret_enabled=bool(settings.service_secret),
+            synthetic_demo=settings.synthetic_demo,
+        )
 
     for router in ROUTERS:
         app.include_router(router)
