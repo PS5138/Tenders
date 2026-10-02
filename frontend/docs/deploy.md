@@ -18,6 +18,8 @@ Backend API and worker: `SERVICE_SECRET` equal to that frontend secret; `SYNTHET
 
 The frontend validates required configuration at boot. Demo mode checks private `/health` and refuses fake, synthetic or unreported providers, or an API that does not report service-secret enforcement. Health reports provider configuration, not successful live model calls. Verify actual generation separately.
 
+To exercise live providers before hosting, the local joined stack takes the `docker-compose.live.yml` override (root README, "Live providers"), which pins the backend's live trio and passes the keys through. That stack keeps `APP_MODE=development`, because `frontend-provision` creates the published-password development accounts and refuses to run in demo mode (`frontend-seed` only loads the synthetic documents and pack); `APP_MODE=demo` is for hosted deployments provisioned with `pnpm business:create`. `MAX_UPLOAD_BYTES` (optional, default 25 MiB) is the proxy's upload cap and must equal the API's value so one 413 message is shown.
+
 The old `AI_PROVIDER`, `PURU_AI_*`, frontend `STORAGE_DRIVER`, signed-download and frontend-worker settings no longer apply. Files, pipeline jobs and exports live in the backend.
 
 ## Release procedure

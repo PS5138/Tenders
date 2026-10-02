@@ -40,8 +40,12 @@ from app.review.events import record_event
 
 logger = logging.getLogger(__name__)
 
-# Plain code: starlette renamed the 422 constant between versions.
+# Plain codes: starlette renamed the 422 and 413 constants between versions.
 UNPROCESSABLE = 422
+TOO_LARGE = 413
+
+# Uploads are read in chunks of this size up to ``Settings.max_upload_bytes``.
+UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 router = APIRouter(tags=["documents"])
 
@@ -178,6 +182,56 @@ def _safe_filename(filename: str) -> str:
     return cleaned[:200]
 
 
+def format_upload_limit(limit_bytes: int) -> str:
+    """The limit in MiB for the 413 detail: a whole number when it is one, otherwise one
+    decimal, never rounded up (1.5 MiB is "1.5", 1.56 MiB is "1.5", 25 MiB is "25"). The
+    Next.js proxy's ``uploadLimitMessage`` uses the same rule so the two layers never disagree
+    about the number."""
+    tenths = limit_bytes * 10 // (1024 * 1024)
+    whole, fraction = divmod(tenths, 10)
+    return str(whole) if fraction == 0 else f"{whole}.{fraction}"
+
+
+def upload_limit_message(limit_bytes: int) -> str:
+    """The 413 detail. One sentence shared with the Next.js proxy, which refuses an oversized
+    upload before it reaches the API in the joined stack; the wording and the number are the
+    same whichever layer answers."""
+    return f"This file is too large. Uploads are limited to {format_upload_limit(limit_bytes)} MB."
+
+
+def read_upload(file: UploadFile) -> bytes:
+    """Read the uploaded bytes in chunks, stopping at ``Settings.max_upload_bytes``.
+
+    Raises 413 as soon as the limit is passed, so an oversized file is refused before the
+    ``SYNTHETIC_DEMO`` checksum, before any storage write and before the document row exists,
+    and the whole file is never read into memory first. A file exactly at the limit is
+    accepted. Raises 422 for an empty file, likewise before the checksum, any storage write or
+    the document row, so a zero-byte drop never leaves a queued document that can only fail
+    (or, for a question pack, occupies the tender's one pack slot). Both upload routes read
+    through this one function.
+    """
+    limit = get_settings().max_upload_bytes
+    detail = upload_limit_message(limit)
+    # The parser's own count, when it has one, saves reading a file that is already known
+    # to be too large; acceptance is still decided by the bounded read below.
+    if file.size is not None and file.size > limit:
+        raise HTTPException(TOO_LARGE, detail=detail)
+    file.file.seek(0)
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(min(UPLOAD_CHUNK_BYTES, limit - total + 1))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(TOO_LARGE, detail=detail)
+        chunks.append(chunk)
+    if total == 0:
+        raise HTTPException(UNPROCESSABLE, detail="The uploaded file is empty.")
+    return b"".join(chunks)
+
+
 def store_upload(org_id: uuid.UUID, document_id: uuid.UUID, filename: str, data: bytes) -> str:
     """Write the uploaded bytes under the storage path; returns the stored path as a string.
 
@@ -258,10 +312,9 @@ def upload_document(
     round trips are synchronous, and FastAPI's threadpool keeps them off the event loop that
     drains the draft and reply streams.
     """
-    file.file.seek(0)
-    data = file.file.read()
-    if not data:
-        raise HTTPException(UNPROCESSABLE, detail="The uploaded file is empty.")
+    # Bounded read: 413 past max_upload_bytes, 422 for an empty file, both before the
+    # checksum, the file write or the row.
+    data = read_upload(file)
     filename = file.filename or "upload"
     document_id = uuid.uuid4()
     storage_path = store_upload(org_id, document_id, filename, data)
@@ -514,4 +567,13 @@ def fix_pair(
     )
 
 
-__all__ = ["DocumentWithJob", "discard_upload", "document_record", "router", "store_upload"]
+__all__ = [
+    "DocumentWithJob",
+    "discard_upload",
+    "document_record",
+    "format_upload_limit",
+    "read_upload",
+    "router",
+    "store_upload",
+    "upload_limit_message",
+]

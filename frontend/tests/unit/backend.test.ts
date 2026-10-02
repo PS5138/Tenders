@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   allowedBackendRequest,
   browserIdentityHeader,
+  configuredOrigin,
   isSameOriginMutation,
+  mutationOriginProblem,
 } from "@/server/backend/policy";
 import { backendFetch, passthroughResponse } from "@/server/backend/transport";
 import {
@@ -114,6 +116,36 @@ describe("private backend boundary", () => {
       expect(isSameOriginMutation(request(origin), "https://ten.example")).toBe(
         false,
       );
+  });
+
+  it("says which origin arrived and which APP_URL expects, without reflecting junk", () => {
+    const headers = (origin?: string) =>
+      new Headers({ "x-ten-request": "1", ...(origin ? { origin } : {}) });
+    expect(
+      mutationOriginProblem(headers("https://ten.example"), "https://ten.example/"),
+    ).toBeNull();
+    const mismatch = mutationOriginProblem(
+      headers("http://localhost:3000"),
+      "https://user:secret@ten.example/app?x=1",
+    );
+    expect(mismatch).toContain("http://localhost:3000");
+    expect(mismatch).toContain("https://ten.example");
+    expect(mismatch).toContain("APP_URL");
+    expect(mismatch).not.toContain("secret");
+    expect(mutationOriginProblem(headers(), "https://ten.example")).toContain(
+      "no Origin header",
+    );
+    const junk = mutationOriginProblem(
+      headers(`https://evil.ex\u00e4mple${"a".repeat(500)}`),
+      "https://ten.example",
+    );
+    expect(junk).not.toContain("\u00e4");
+    expect(junk!.length).toBeLessThan(500);
+    expect(
+      mutationOriginProblem(new Headers({ origin: "https://ten.example" }), "https://ten.example"),
+    ).toBe("This request must come from the Ten application.");
+    expect(configuredOrigin("https://user:secret@ten.example/app")).toBe("https://ten.example");
+    expect(configuredOrigin("not a url")).toBeNull();
   });
 
   it("injects trusted headers and passes the original upload stream without reading it", async () => {

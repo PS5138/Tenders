@@ -6,14 +6,36 @@ Next.js 16.3.6 / React 19.2.8, using Puru’s FastAPI service as the sole tender
 
 The supported combined local entry point is `docker compose up --build -d` from the repository root. See the [root README](../README.md). There is no frontend worker or separate frontend Compose stack.
 
-For native development, copy `.env.example` to `.env.local` and provide a running Supabase Auth service, frontend PostgreSQL database, private backend API and Python worker. `pnpm local:start` supplies Auth/Postgres on Linux x86_64 only; it does not start the Python service. On macOS use Docker or separately configured services.
+### Native development (Linux x86_64 and macOS on Apple silicon)
+
+Nothing here needs Docker, Homebrew or admin rights. Prerequisites:
+
+- Node 22 with pnpm. Any Node 22 works; the team's Macs keep one under `~/.local`, so run `export PATH="$HOME/.local/node/current/bin:$PATH"` first.
+- The backend virtualenv at the repository root (`.venv`, see `backend/README.md`). Its `pgserver` package bundles Postgres 16, and `scripts/local/env.sh` falls back to those binaries when no system PostgreSQL is found, so the frontend database needs nothing else installed. That build ships only the `vector` extension; nothing in our SQL calls `pgcrypto` functions, so `bootstrap.sql` and the squashed migration only raise a notice when the extension is missing.
+- `curl` and `tar` for the one-time Supabase Auth download (`scripts/local/install-auth.sh` picks the release asset for the platform and exits with `unsupported platform: use Docker Compose` elsewhere).
+
+Start the API and the worker first, in their own terminal, from the repository root:
+
+```sh
+backend/scripts/dev_up.sh   # pgserver Postgres on :54329 (migrated and seeded), the worker in the background, uvicorn on http://127.0.0.1:8000
+```
+
+It uses the fake providers with `SYNTHETIC_DEMO=true` and no service secret, which is what the generated `.env.local` expects (`BACKEND_URL=http://127.0.0.1:8000`, `BACKEND_SERVICE_SECRET` empty). Then, from `frontend/`, in this order:
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm local:start       # Postgres :54322 (database `ten`), Supabase Auth :9999 and the /auth/v1 gateway :54321; writes .env.local with local-only secrets on first run
 pnpm db:migrate
-pnpm db:seed-backend   # development/test accounts and supplied synthetic data only
+pnpm db:provision      # development/test accounts, businesses and backend organisations (needs the API)
+pnpm db:seed-backend   # synthetic library documents and question pack from ../eval/data (BACKEND_FIXTURES_DIR overrides); needs db:provision first
 pnpm dev
 ```
+
+`pnpm local:start` is idempotent: it reuses the cluster, the Auth binary and `.env.local` (`node scripts/local/write-env.mjs --force` regenerates the secrets). Everything it creates lives under `frontend/.local/`: the cluster in `pg/`, the Auth binary and its migrations in `bin/` and `auth/`, pid files in `run/`, and logs in `logs/` (`postgres.log`, `auth-9999-migrate.log`, `auth-9999.log`, `gateway-54321.log`). The backend side logs the worker to `storage/dev-worker.log`, uvicorn to its terminal and its Postgres to `.devdb/server.log`. `bash -c 'source scripts/local/env.sh && psql -d ten'` opens the sidecar database with the same binaries. `pnpm db:reset` drops and recreates `ten` and re-runs both migration sets.
+
+To stop: `pnpm local:stop` ends Postgres, Auth and the gateway; Ctrl-C in the `dev_up.sh` terminal ends the API and the worker; `.venv/bin/python backend/scripts/dev_db.py --stop` ends the backend Postgres.
+
+Natively, Supabase Auth is the `v2.197.0` release binary (`AUTH_VERSION` in `scripts/local/env.sh`); stable releases from `v2.195.0` publish a macOS arm64 asset as well as the Linux x86 one. The Compose stack runs the `supabase/gotrue:v2.180.0` image, whose release has no macOS asset. Both apply the same `auth` schema migrations; override `AUTH_VERSION` to pin another release that has an asset for your platform.
 
 The squashed frontend migration is for a fresh database. Nothing was deployed under the old schema. Do not apply it over an old experimental frontend database; retain a backup and create a new local database instead.
 
@@ -23,7 +45,7 @@ The browser calls `/api/w/:workspaceId/backend/...`. Every request verifies the 
 
 Uploads and NDJSON streams bypass Next’s proxy matcher. The bridge passes request and response streams directly, disables compression and preserves download filenames. Only small question metadata/comment requests are inspected to validate assignees and emit notifications. Generation reconnects by polling persisted results, never automatically repeating the POST.
 
-The sidecar schema contains identity, invitations, membership history, notifications and confirmed form locations. It does not store tender, document, question, answer or thread content. Form exports re-read approved current answers and originals from the API, run its export gate, and refuse missing, occupied or duplicate target cells. Office ZIP helpers remain solely for filling forms.
+The sidecar schema contains identity, invitations, membership history, notifications, reviewers, comment anchors and confirmed form locations. It does not store tender, document, question, answer or thread content. Anchored comments are mirrored into the backend record: every new thread or reply is first written through the API’s comments endpoint, which stores the comment and its `comment_added` event with the actor, as the quoted words, the comment and a `[thread <id>]` reference; only when that succeeds does the sidecar keep the anchor and the returned backend comment id, and a failed backend write saves nothing. Resolving and reopening threads stays in the sidecar. Comments cannot be removed from the backend record: an author can hide their own message from the Comments tab, which filters it from reads but deletes nothing. Form exports re-read approved current answers and originals from the API, run its export gate, and refuse missing, occupied or duplicate target cells. Office ZIP helpers remain solely for filling forms.
 
 Notifications cover assignments, status changes for the assignee, and comments for the assignee or named `@Display Name` mentions made through Ten. Backend changes made outside Ten do not generate sidecar notifications. Delivery is best effort across the two databases; failures are logged without misreporting a saved backend change. Deleted-question notifications and form mappings are hidden on reads. My reviews and team assignment counts are read live from the backend. Display names must be unique within each business because backend authorship and assignment use names.
 

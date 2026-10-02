@@ -122,10 +122,11 @@ function ThreadCard({
               disabled={busy}
               onClick={(e) => {
                 e.stopPropagation();
-                if (window.confirm('Delete this comment?')) void send({ action: 'delete_message', messageId: m.id });
+                if (window.confirm('Remove this comment from the thread? It stays in the question’s activity record.'))
+                  void send({ action: 'delete_message', messageId: m.id });
               }}
             >
-              Delete
+              Remove
             </button>
           ) : null}
         </div>

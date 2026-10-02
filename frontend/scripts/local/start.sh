@@ -16,10 +16,10 @@ if [ "${#PG_AS[@]}" -gt 0 ]; then chown postgres "$PG_DATA" "$PG_SOCKET_DIR"; to
 [ -x "$AUTH_BIN" ] || "$ROOT_DIR/scripts/local/install-auth.sh"
 
 if [ ! -f "$PG_DATA/PG_VERSION" ]; then
-  "${PG_AS[@]}" "$PG_BIN/initdb" -D "$PG_DATA" -U postgres --auth=trust --encoding=UTF8 >/dev/null
+  ${PG_AS[@]+"${PG_AS[@]}"} "$PG_BIN/initdb" -D "$PG_DATA" -U postgres --auth=trust --encoding=UTF8 >/dev/null
 fi
-if ! "${PG_AS[@]}" "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
-  "${PG_AS[@]}" "$PG_BIN/pg_ctl" -D "$PG_DATA" -o "-p $PG_PORT -k $PG_SOCKET_DIR -c listen_addresses=127.0.0.1" \
+if ! ${PG_AS[@]+"${PG_AS[@]}"} "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
+  ${PG_AS[@]+"${PG_AS[@]}"} "$PG_BIN/pg_ctl" -D "$PG_DATA" -o "-p $PG_PORT -k $PG_SOCKET_DIR -c listen_addresses=127.0.0.1" \
     -l "$LOCAL_DIR/logs/postgres.log" -w start >/dev/null
 fi
 psql -q -d postgres -v ON_ERROR_STOP=1 -f "$ROOT_DIR/scripts/local/bootstrap.sql"

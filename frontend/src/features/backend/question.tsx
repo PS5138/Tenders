@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquarePlus } from 'lucide-react';
+import { ChevronRight, MessageSquarePlus } from 'lucide-react';
 import { highlightRanges, quoteFor, relocate, type Anchor } from '@/lib/comment-anchors';
 import { Badge } from '@/components/ui/badge';
 import { buttonClasses } from '@/components/ui/button';
@@ -14,16 +14,68 @@ import { diffWords } from '@/lib/diff';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorNote, Field, field, label, panel, useResource, type S } from './shared';
-import { Trace, TraceLegend, SourcePane, type Source } from './trace';
+import { Trace, TraceLegend, SourcePane, attentionIndices, focusSegmentMarker, nextAttentionIndex, nextShortcutPressed, NEXT_SHORTCUT, type Source } from './trace';
 import { useDraftStream } from './use-draft-stream';
+import type { Segment } from '@/lib/backend-stream';
 
 type Member = { userId: string; displayName: string };
+const NO_SEGMENTS: Segment[] = [];
+
+/**
+ * Whether the editor should take on a version that landed while it was open. The text is adopted
+ * silently only while the person has not typed; otherwise their text is kept and a conflict is shown.
+ */
+export function adoptLandedVersion(
+  editor: { seededId: string | null; seededText: string; text: string },
+  landed: { id: string; text: string } | null,
+): 'ignore' | 'adopt' | 'conflict' {
+  if (!landed || landed.id === editor.seededId) return 'ignore';
+  return editor.text === editor.seededText ? 'adopt' : 'conflict';
+}
+
+/**
+ * What the editor does when the question's current version differs from the one it last saw. Null when
+ * the prop has not changed. The gate is the prop changing, not a mismatch with `seeded`: a save and the
+ * "Reload current answer" button move `seeded` ahead of the prop until the parent's reload lands, and
+ * that reload must not revert the editor to the version it just left. A version the editor already
+ * seeded itself from is only recorded as seen; a foreign one is adopted or flagged as a conflict.
+ */
+export function reconcileLandedVersion(
+  state: { seenId: string | null; seeded: { id: string | null; text: string }; text: string },
+  current: { id: string; text: string } | null,
+): { seenId: string | null; seeded: { id: string | null; text: string } | null; outcome: 'ignore' | 'adopt' | 'conflict' } | null {
+  const currentId = current?.id ?? null;
+  if (currentId === state.seenId) return null;
+  const outcome = adoptLandedVersion({ seededId: state.seeded.id, seededText: state.seeded.text, text: state.text }, current);
+  return { seenId: currentId, seeded: outcome === 'ignore' ? null : { id: currentId, text: current?.text ?? '' }, outcome };
+}
+
 function Editor({ workspaceId, question, onSaved }: { workspaceId: string; question: S['QuestionDetail']; onSaved: () => void }) {
-  const [baseVersion, setBaseVersion] = useState(question.current_answer?.id ?? null);
-  const [text, setText] = useState(question.current_answer?.text ?? ''),
+  const current = question.current_answer ?? null;
+  const currentId = current?.id ?? null,
+    currentText = current?.text ?? '';
+  // The version the text was seeded from. The base version for a save is the same id until a save succeeds.
+  const [seeded, setSeeded] = useState({ id: currentId, text: currentText });
+  // The current version id the editor last reconciled against (the prop, not the seed).
+  const [seenId, setSeenId] = useState(currentId);
+  const [baseVersion, setBaseVersion] = useState(currentId);
+  const [text, setText] = useState(currentText),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [conflict, setConflict] = useState<S['AnswerRecord'] | null>(null);
+  // A new current version landed while the editor was open (a draft finished, a colleague saved, a reply
+  // was saved as the answer). State is adjusted during render, the React pattern for reacting to a prop
+  // change; the compiler lint rules forbid the equivalent synchronous setState inside an effect.
+  const landed = reconcileLandedVersion({ seenId, seeded, text }, current ? { id: currentId!, text: currentText } : null);
+  if (landed) {
+    setSeenId(landed.seenId);
+    if (landed.seeded) setSeeded(landed.seeded);
+    if (landed.outcome === 'adopt') {
+      setText(currentText);
+      setBaseVersion(currentId);
+      setConflict(null);
+    } else if (landed.outcome === 'conflict' && current) setConflict(current);
+  }
   async function save() {
     setBusy(true);
     setError(null);
@@ -32,6 +84,7 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
         text,
         base_version_id: baseVersion,
       });
+      setSeeded({ id: saved.answer.id, text: saved.answer.text });
       setBaseVersion(saved.answer.id);
       setText(saved.answer.text);
       setConflict(null);
@@ -53,7 +106,7 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
         {text.trim() ? text.trim().split(/\s+/).length : 0} / {question.word_limit ?? 'no limit'} words. Saving creates a new version and
         returns the answer to writer edited.
       </p>
-      <Button busy={busy} disabled={!text.trim() || text === question.current_answer?.text} onClick={() => void save()}>
+      <Button busy={busy} disabled={!text.trim() || text === seeded.text} onClick={() => void save()}>
         Save answer
       </Button>
       <ErrorNote error={error} />
@@ -64,6 +117,7 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
           <Button
             onClick={() => {
               if (window.confirm('Reload the current version? Copy any unsaved edits first.')) {
+                setSeeded({ id: conflict.id, text: conflict.text });
                 setText(conflict.text);
                 setBaseVersion(conflict.id);
                 setConflict(null);
@@ -79,6 +133,45 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
     </div>
   );
 }
+/**
+ * The support summary at the top of the answer. While sentences need attention the whole summary is a
+ * button that jumps to the next one; the same jump is on the `n` key.
+ */
+function SupportSummary({ answer, onNext }: { answer: S['AnswerRecord']; onNext: () => void }) {
+  const summary = answer.support_summary;
+  const attention = summary.needs_attention;
+  const body = (
+    <>
+      <strong>
+        {summary.supported} of {summary.substantive}
+      </strong>{' '}
+      substantive sentences supported
+      {attention ? `, ${attention} ${attention === 1 ? 'needs' : 'need'} attention` : ''} · Evidence coverage{' '}
+      {summary.score == null ? 'not available' : `${Math.round(summary.score * 100)}%`} · {answer.word_count} words
+      <span className="block font-normal text-muted">
+        {attention ? `Click here or press ${NEXT_SHORTCUT} to jump to the next sentence needing attention. ` : ''}
+        Evidence coverage measures support, not correctness.
+      </span>
+    </>
+  );
+  return attention ? (
+    <button
+      type="button"
+      className="flex w-full items-center justify-between gap-3 rounded-md bg-soft px-3 py-2 text-left text-xs hover:bg-line/60 focus:outline-none focus:ring-2 focus:ring-accent"
+      title={`Jump to the next sentence needing attention (press ${NEXT_SHORTCUT})`}
+      aria-keyshortcuts={NEXT_SHORTCUT}
+      // Keep focus where it is so the jump decides what is focused next, not the click.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onNext}
+    >
+      <span>{body}</span>
+      <ChevronRight className="size-4 shrink-0" aria-hidden />
+    </button>
+  ) : (
+    <p className="rounded-md bg-soft px-3 py-2 text-xs">{body}</p>
+  );
+}
+
 const STEPS = ['not_started', 'ai_draft', 'writer_edited', 'sme_verified', 'approved'];
 const RANK = Object.fromEntries(STEPS.map((s, i) => [s, i]));
 
@@ -196,7 +289,7 @@ export function QuestionWorkspace({
       setBusy(false);
     }
   }
-  const visibleSegments = stream.busy ? stream.state.segments : (answer?.segments ?? []);
+  const visibleSegments = stream.busy ? stream.state.segments : (answer?.segments ?? NO_SEGMENTS);
   // Place every thread against the current version: as made, carried over, or outdated.
   const placed: PlacedThread[] = comments.threads.map((t) => {
     if (answer && t.answerId === answer.id) return { ...t, current: t.anchor, quote: quoteFor(answer.segments, t.anchor), carried: false };
@@ -246,20 +339,31 @@ export function QuestionWorkspace({
       box = root.getBoundingClientRect();
     setSelection({ anchor, quote, top: rect.top - box.top - 38, left: Math.max(0, Math.min(rect.left - box.left, box.width - 130)) });
   }
-  function nextUnsupported() {
-    const segments = visibleSegments.filter((s) => ['weak', 'unsupported', 'human_authored'].includes(s.support_status));
-    const current = document.activeElement?.closest('[data-segment]')?.getAttribute('data-segment');
-    const next = segments.find((s) => s.index > Number(current ?? -1)) ?? segments[0];
-    if (next) {
-      const element = document.getElementById(`answer-segment-${next.index}`);
-      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element?.querySelector('button')?.focus();
+  // The last sentence visited by the jump control, so repeated presses move through the answer and wrap.
+  // It starts again whenever a different version becomes current.
+  const lastVisited = useRef<number | null>(null);
+  const answerId = answer?.id ?? null;
+  useEffect(() => {
+    lastVisited.current = null;
+  }, [answerId]);
+  const jumpToNext = useCallback(() => {
+    const next = nextAttentionIndex(attentionIndices(visibleSegments), lastVisited.current);
+    if (next == null) return;
+    lastVisited.current = next;
+    focusSegmentMarker('answer', next);
+  }, [visibleSegments]);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!nextShortcutPressed(event)) return;
+      event.preventDefault();
+      jumpToNext();
     }
-  }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [jumpToNext]);
   function showSentence(index: number) {
-    const element = document.getElementById(`answer-segment-${index}`);
-    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    element?.querySelector('button')?.focus();
+    lastVisited.current = index;
+    focusSegmentMarker('answer', index);
   }
   function confirmSentence(index: number) {
     if (!answer) return;
@@ -421,22 +525,7 @@ export function QuestionWorkspace({
               ) : null}
               <ErrorNote error={stream.state.error} />
               {answer ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-soft px-3 py-2 text-xs">
-                  <span>
-                    <strong>
-                      {answer.support_summary.supported} of {answer.support_summary.substantive}
-                    </strong>{' '}
-                    substantive sentences supported · Evidence coverage{' '}
-                    {answer.support_summary.score == null ? 'not available' : `${Math.round(answer.support_summary.score * 100)}%`} ·{' '}
-                    {answer.word_count} words
-                    <span className="block text-muted">Evidence coverage measures support, not correctness.</span>
-                  </span>
-                  {answer.support_summary.needs_attention ? (
-                    <Button size="sm" onClick={nextUnsupported}>
-                      Next sentence needing attention
-                    </Button>
-                  ) : null}
-                </div>
+                <SupportSummary answer={answer} onNext={jumpToNext} />
               ) : null}
               {visibleSegments.length ? <TraceLegend /> : null}
               <div ref={answerRef} className="relative" onMouseUp={captureSelection} onKeyUp={captureSelection}>

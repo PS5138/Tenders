@@ -49,9 +49,10 @@ export async function myTasks(userId: string, workspaceId: string) {
         coalesce((select json_agg(json_build_object('authorId', c.author_id, 'authorName', p.display_name, 'body', c.body, 'createdAt', c.created_at)
                                   order by c.created_at)
                   from app.comment_messages c join app.profiles p on p.user_id = c.author_id
-                  where c.thread_id = t.id), '[]'::json) as messages
+                  where c.thread_id = t.id and c.hidden_at is null), '[]'::json) as messages
       from app.comment_threads t
-      where t.workspace_id = ${workspaceId} and t.resolved_at is null`,
+      where t.workspace_id = ${workspaceId} and t.resolved_at is null
+        and exists (select 1 from app.comment_messages c where c.thread_id = t.id and c.hidden_at is null)`,
   }));
 
   const yourTurn: TaskItem[] = [];

@@ -157,3 +157,58 @@ async def test_delete_refuses_a_submitted_tender(app_client):
     archived = (await app_client.patch(path, json={"status": "archived"})).json()
     restored = (await app_client.patch(path, json={"status": "open"})).json()
     assert (archived["status"], restored["status"]) == ("archived", "submitted")
+
+
+# --- Tender documents share the synthetic checksum gate with the library route ----------------
+
+_EVAL_DATA = pytest.importorskip("app.config").REPO_ROOT / "eval" / "data"
+_XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+async def _upload_tender_document(app_client, filename: str, data: bytes, kind: str):
+    tender = (await app_client.post("/tenders", json={"name": f"Synthetic {kind}"})).json()
+    return await app_client.post(
+        f"/tenders/{tender['id']}/documents",
+        data={"tender_doc_kind": kind},
+        files={"file": (filename, data, _XLSX_TYPE)},
+    )
+
+
+@pytest.mark.asyncio
+async def test_synthetic_demo_refuses_unseen_tender_documents(app_client, settings_override):
+    settings_override(synthetic_demo=True)
+    for kind in ("question_pack", "specification"):
+        refused = await _upload_tender_document(app_client, "unseen.xlsx", b"Not a fixture", kind)
+        assert refused.status_code == 422, refused.text
+        assert "synthetic" in refused.json()["detail"].lower()
+    # Nothing was persisted for the refused uploads.
+    for tender in (await app_client.get("/tenders")).json():
+        assert (await app_client.get(f"/tenders/{tender['id']}")).json()["documents"] == []
+
+
+@pytest.mark.asyncio
+async def test_synthetic_demo_accepts_the_supplied_question_pack(app_client, settings_override):
+    settings_override(synthetic_demo=True)
+    pack = _EVAL_DATA / "question_pack_northern_fells_2025.xlsx"
+    accepted = await _upload_tender_document(
+        app_client, pack.name, pack.read_bytes(), "question_pack"
+    )
+    assert accepted.status_code == 202, accepted.text
+    body = accepted.json()
+    assert body["tender_doc_kind"] == "question_pack"
+    assert body["job_id"] is not None
+    download = await app_client.get(f"/documents/{body['id']}/file")
+    assert download.status_code == 200
+    assert download.content == pack.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_tender_documents_accept_arbitrary_bytes_outside_synthetic_demo(
+    app_client, settings_override
+):
+    settings_override(synthetic_demo=False)
+    accepted = await _upload_tender_document(
+        app_client, "anything.xlsx", b"Arbitrary bytes, not a fixture", "specification"
+    )
+    assert accepted.status_code == 202, accepted.text
+    assert accepted.json()["tender_doc_kind"] == "specification"

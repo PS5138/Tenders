@@ -17,11 +17,17 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, case, delete, func, select
+from sqlalchemy import and_, case, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Actor, DbSession, OrgId
-from app.api.documents import DocumentWithJob, discard_upload, document_record
+from app.api.documents import (
+    DocumentWithJob,
+    discard_upload,
+    document_record,
+    read_upload,
+    store_upload,
+)
 from app.api.schemas import (
     CurrentAnswerSummary,
     JobRecord,
@@ -314,32 +320,46 @@ def patch_tender(
 def delete_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Actor) -> Response:
     """Delete a tender that was never submitted, with its documents, questions, answers,
     threads and their events. A submitted tender is a record (its approved answers may be in the
-    library) and is archived instead: 409. Refused with 409 while a job or a draft for the
-    tender is still running, so nothing writes into rows being removed."""
+    library) and is archived instead: 409. Refused with 409 while anything is still writing
+    into the rows being removed: a queued or running job whose payload names the tender
+    (``extract_questions``, ``triage_tender``, ``draft_all``) or one of its documents (the
+    parse-only ``ingest_document`` carries ``{document_id, actor}`` and no ``tender_id``), a
+    question draft in progress, or a streaming reply on one of the tender's threads."""
     tender = _get_tender(db, tender_id, org_id)
     if tender.submitted_at is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="A submitted tender is kept as a record. Archive it instead.",
         )
+    documents = list(db.scalars(select(Document).where(Document.tender_id == tender.id)))
+    document_ids = [str(document.id) for document in documents]
+    names_tender = Job.payload["tender_id"].astext == str(tender.id)
+    names_tender_or_document = (
+        or_(names_tender, Job.payload["document_id"].astext.in_(document_ids))
+        if document_ids
+        else names_tender
+    )
     running = db.scalar(
         select(func.count())
         .select_from(Job)
         .where(
             Job.org_id == org_id,
             Job.status.in_([e.JobStatus.QUEUED.value, e.JobStatus.RUNNING.value]),
-            Job.payload["tender_id"].astext == str(tender.id),
+            names_tender_or_document,
         )
     )
     question_ids = list(db.scalars(select(Question.id).where(Question.tender_id == tender.id)))
-    drafting = False
+    thread_ids = list(db.scalars(select(Thread.id).where(Thread.tender_id == tender.id)))
+    streaming = False
     try:
-        from app.generate.runner import draft_in_progress as drafting_now
+        from app.generate.runner import draft_in_progress, reply_in_progress
 
-        drafting = any(drafting_now(question_id) for question_id in question_ids)
+        streaming = any(draft_in_progress(question_id) for question_id in question_ids) or any(
+            reply_in_progress(thread_id) for thread_id in thread_ids
+        )
     except ImportError:
         pass
-    if running or drafting:
+    if running or streaming:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="This tender is still being processed. Try again when processing finishes.",
@@ -349,7 +369,6 @@ def delete_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Act
         if question_ids
         else []
     )
-    documents = list(db.scalars(select(Document).where(Document.tender_id == tender.id)))
     paths = [document.storage_path for document in documents if document.storage_path]
     entity_ids = [tender.id, *question_ids, *answer_ids, *(d.id for d in documents)]
     db.execute(delete(Event).where(Event.org_id == org_id, Event.entity_id.in_(entity_ids)))
@@ -377,21 +396,14 @@ def _safe_filename(filename: str | None) -> str:
 
 
 def _store_upload(
-    org_id: uuid.UUID, tender_id: uuid.UUID, document_id: uuid.UUID, upload: UploadFile
+    org_id: uuid.UUID, document_id: uuid.UUID, upload: UploadFile, data: bytes
 ) -> str:
-    """Store the bytes through owner A's ``app.ingest.storage.save_upload`` (the one place that
-    touches the file system for documents); a local writer stands in if it is unavailable."""
-    upload.file.seek(0)
-    data = upload.file.read()
-    try:
-        from app.ingest.storage import save_upload
-    except ImportError:
-        directory = Path(get_settings().storage_path) / "tenders" / str(tender_id)
-        directory.mkdir(parents=True, exist_ok=True)
-        target = directory / f"{document_id}_{_safe_filename(upload.filename)}"
-        target.write_bytes(data)
-        return str(target.resolve())
-    return save_upload(data, upload.filename or "upload", document_id=document_id, org_id=org_id)
+    """Store bytes already read through ``app.api.documents.read_upload`` via
+    ``app.api.documents.store_upload``, the same path as ``POST /documents``: it applies the
+    ``SYNTHETIC_DEMO`` checksum gate (422 for bytes that are not one of the supplied synthetic
+    files) and then writes through ``app.ingest.storage.save_upload``, so both upload routes
+    are bounded, gated and stored alike."""
+    return store_upload(org_id, document_id, upload.filename or "upload", data)
 
 
 @router.post(
@@ -431,6 +443,9 @@ def upload_tender_document(
                 headers={"X-Document-Id": str(existing.id)},
             )
 
+    # Bounded read: 413 past max_upload_bytes, 422 for an empty file, both before the
+    # checksum, the file write or the row (and before a pack takes the tender's one slot).
+    data = read_upload(file)
     document = Document(
         id=uuid.uuid4(),
         org_id=org_id,
@@ -444,7 +459,7 @@ def upload_tender_document(
         effective_date_source=e.EffectiveDateSource.UPLOAD_TIME.value,
         ingest_status=e.IngestStatus.QUEUED.value,
     )
-    document.storage_path = _store_upload(org_id, tender.id, document.id, file)
+    document.storage_path = _store_upload(org_id, document.id, file, data)
     try:
         db.add(document)
         db.flush()
@@ -547,11 +562,19 @@ def submit_tender(
     tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Actor
 ) -> SubmitResponse:
     """Mark the tender submitted and offer every approved answer for promotion into the
-    library (when the promotion module is available)."""
+    library (when the promotion module is available). 409 once ``submitted_at`` is set,
+    whatever the status now is (a submitted tender that was archived stays submitted), and
+    409 for an archived tender that was never submitted: restoring is ``PATCH {status:
+    "open"}``, so submit never doubles as an unarchive."""
     tender = _get_tender(db, tender_id, org_id)
-    if tender.status == e.TenderStatus.SUBMITTED.value:
+    if tender.submitted_at is not None or tender.status == e.TenderStatus.SUBMITTED.value:
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="This tender has already been submitted."
+        )
+    if tender.status == e.TenderStatus.ARCHIVED.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="This tender is archived. Restore the tender first, then submit it.",
         )
     previous_status = tender.status
     tender.status = e.TenderStatus.SUBMITTED.value

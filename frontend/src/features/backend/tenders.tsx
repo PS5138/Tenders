@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
@@ -416,7 +416,10 @@ export function TenderWorkspace({
       format: string;
       mode: string;
     } | null>(null);
-  const [answers, setAnswers] = useState<S['QuestionDetail'][]>([]),
+  // Document view: one QuestionDetail per question, fetched once and refreshed only when the
+  // question's current answer changes. Filtering and sorting read from this cache.
+  const detailCache = useRef(new Map<string, { answerId: string | null; detail: S['QuestionDetail'] }>());
+  const [details, setDetails] = useState<Record<string, S['QuestionDetail']>>({}),
     [source, setSource] = useState<Source | null>(null);
   const { reload: reloadTender } = tender;
   const { reload: reloadQuestions } = questions;
@@ -458,20 +461,41 @@ export function TenderWorkspace({
         ),
     [questions.data, status, coverage, search, sort, owner],
   );
+  // The fetch is keyed on the visible ids and their current answer ids, so a filter keystroke
+  // or a two-second job poll that changes neither refetches nothing and aborts nothing.
+  const detailKey = view === 'document' ? rows.map((q) => `${q.id}:${q.current_answer?.id ?? ''}`).join(',') : '';
   useEffect(() => {
-    if (view !== 'document') return;
-    let active = true;
-    Promise.all(rows.map((q) => backendJson<S['QuestionDetail']>(workspaceId, `/questions/${q.id}`)))
-      .then((a) => {
-        if (active) setAnswers(a);
+    if (!detailKey) return;
+    const pending = detailKey
+      .split(',')
+      .map((entry) => {
+        const [id, answerId] = entry.split(':');
+        return { id, answerId: answerId || null };
       })
-      .catch((e) => {
-        if (active) setError(e.message);
+      .filter(({ id, answerId }) => {
+        const cached = detailCache.current.get(id);
+        return !cached || cached.answerId !== answerId;
       });
-    return () => {
-      active = false;
+    if (!pending.length) return;
+    const controller = new AbortController();
+    let next = 0;
+    const worker = async () => {
+      while (next < pending.length && !controller.signal.aborted) {
+        const { id, answerId } = pending[next++];
+        const detail = await backendJson<S['QuestionDetail']>(workspaceId, `/questions/${id}`, 'GET', undefined, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        detailCache.current.set(id, { answerId, detail });
+        setDetails((current) => ({ ...current, [id]: detail }));
+      }
     };
-  }, [view, rows, workspaceId]);
+    // About six requests in flight at once, whatever the size of the tender.
+    Promise.all(Array.from({ length: Math.min(6, pending.length) }, worker)).catch((e: unknown) => {
+      if (!controller.signal.aborted) setError((e as Error).message);
+    });
+    return () => controller.abort();
+  }, [detailKey, workspaceId]);
   async function act(action: string, body: unknown = {}) {
     setBusy(true);
     setError(null);
@@ -541,6 +565,16 @@ export function TenderWorkspace({
     }
   }
   const hasPack = Boolean(t?.documents?.some((d) => d.tender_doc_kind === 'question_pack'));
+  // Submission is offered once: an open tender that has never been submitted. The backend
+  // refuses a repeat (409) and that message is shown if it arrives.
+  const canSubmit = t?.status === 'open' && !t.submitted_at;
+  const submitBlocker = !t
+    ? null
+    : t.submitted_at
+      ? `Submitted ${formatDeadline(t.submitted_at)}. Approved answers are already in the library.`
+      : t.status === 'archived'
+        ? 'Archived tenders cannot be submitted. Restore it first.'
+        : null;
   const noQuestions = questions.data !== null && (questions.data ?? []).length === 0;
   // The latest run first: triage follows extraction.
   const activeJob = job ?? t?.triage_job_id ?? t?.extract_job_id;
@@ -568,7 +602,7 @@ export function TenderWorkspace({
                     <Dropdown.Item className={menuItem} onSelect={() => setEditing(true)}>
                       <Pencil aria-hidden /> Edit details
                     </Dropdown.Item>
-                    {t.status === 'open' ? (
+                    {canSubmit ? (
                       <Dropdown.Item
                         className={menuItem}
                         onSelect={() => {
@@ -779,21 +813,28 @@ export function TenderWorkspace({
       {hasPack && !noQuestions && view === 'document' ? (
         <div className={`grid gap-4 ${source ? 'xl:grid-cols-2' : ''}`}>
           <div className="space-y-5">
-            {answers.map((q) => (
-              <article className={panel} key={q.id}>
-                <Link className="text-sm font-semibold text-accent" href={questionLink(workspaceId, tenderId, q.id)}>
-                  {q.section} · {q.number} · {q.text}
-                </Link>
-                <div className="my-2">
-                  <StatusBadge status={q.status} />
-                </div>
-                {q.current_answer ? (
-                  <Trace segments={q.current_answer.segments} onSource={setSource} prefix={q.id} />
-                ) : (
-                  <p className="text-sm text-muted">No answer yet.</p>
-                )}
-              </article>
-            ))}
+            {rows.map((q) => {
+              const detail = details[q.id];
+              return (
+                <article className={panel} key={q.id}>
+                  <Link className="text-sm font-semibold text-accent" href={questionLink(workspaceId, tenderId, q.id)}>
+                    {q.section} · {q.number} · {q.text}
+                  </Link>
+                  <div className="my-2">
+                    <StatusBadge status={q.status} />
+                  </div>
+                  {!detail ? (
+                    <p className="text-sm text-muted" role="status">
+                      Loading answer…
+                    </p>
+                  ) : detail.current_answer ? (
+                    <Trace segments={detail.current_answer.segments} onSource={setSource} prefix={q.id} />
+                  ) : (
+                    <p className="text-sm text-muted">No answer yet.</p>
+                  )}
+                </article>
+              );
+            })}
           </div>
           {source ? (
             <SourcePane key={JSON.stringify(source.locator)} workspaceId={workspaceId} source={source} onClose={() => setSource(null)} />
@@ -852,13 +893,18 @@ export function TenderWorkspace({
             <Button
               className="mt-3"
               busy={busy}
-              disabled={t?.status === 'submitted'}
+              disabled={!canSubmit}
               onClick={() => {
                 if (window.confirm('Mark this tender submitted and promote its approved answers into the library?')) void act('submit');
               }}
             >
               Mark submitted
             </Button>
+            {submitBlocker ? (
+              <p className="mt-2 text-xs text-muted" role="status">
+                {submitBlocker}
+              </p>
+            ) : null}
           </div>
           <form
             className="flex flex-wrap items-end gap-3"

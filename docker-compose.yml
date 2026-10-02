@@ -7,9 +7,11 @@ x-backend-env: &backend-env
   STORAGE_PATH: /data/storage
   DOCLING_ARTIFACTS_PATH: /opt/docling-models
   FIXTURE_DOCUMENT_PATH: /app/eval/data/fixtures/fixture_document.json
-  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
-  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
-  SYNTHETIC_DEMO: ${SYNTHETIC_DEMO:-true}
+  # The base stack is always the no-keys synthetic stack, whatever .env says; `environment`
+  # wins over env_file. Live providers come from docker-compose.live.yml (see README.md).
+  LLM_PROVIDER: fake
+  EMBEDDING_PROVIDER: fake
+  SYNTHETIC_DEMO: "true"
   SERVICE_SECRET: ${BACKEND_SERVICE_SECRET:-local-synthetic-only-replace-before-hosting}
 
 x-frontend: &frontend
@@ -30,6 +32,9 @@ x-frontend: &frontend
     DATABASE_URL: postgres://postgres@db:5432/ten_frontend
     BACKEND_URL: http://api:8000
     BACKEND_SERVICE_SECRET: ${BACKEND_SERVICE_SECRET:-local-synthetic-only-replace-before-hosting}
+    # One upload limit for the proxy and the API (MAX_UPLOAD_BYTES on both), so the 413 the
+    # user sees names the same figure whichever layer refuses first.
+    MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-26214400}
 
 services:
   db:
@@ -151,6 +156,20 @@ services:
       auth: { condition: service_healthy }
     healthcheck: { disable: true }
 
+  # Accounts, businesses and their backend organisations. Sign-up is disabled, so `web`
+  # waits for this one-shot step; it does not wait for the content seed below.
+  frontend-provision:
+    <<: *frontend
+    command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/seed-provision.ts"]
+    depends_on:
+      frontend-migrate: { condition: service_completed_successfully }
+      gateway: { condition: service_healthy }
+      api: { condition: service_healthy }
+    healthcheck: { disable: true }
+
+  # Synthetic library documents and the sample question pack, loaded while `web` is already
+  # up (the library shows Queued/Parsing badges until the worker finishes). Re-runnable:
+  # `docker compose run --rm frontend-seed` skips what is already there.
   frontend-seed:
     <<: *frontend
     command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/seed-backend.ts"]
@@ -161,9 +180,8 @@ services:
       <<: *frontend-env
       BACKEND_FIXTURES_DIR: /app/backend-fixtures
     depends_on:
-      frontend-migrate: { condition: service_completed_successfully }
+      frontend-provision: { condition: service_completed_successfully }
       worker: { condition: service_started }
-      gateway: { condition: service_healthy }
       api: { condition: service_healthy }
     healthcheck: { disable: true }
 
@@ -173,7 +191,7 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      frontend-seed: { condition: service_completed_successfully }
+      frontend-provision: { condition: service_completed_successfully }
       gateway: { condition: service_healthy }
       api: { condition: service_healthy }
     restart: unless-stopped

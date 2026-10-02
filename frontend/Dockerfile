@@ -67,7 +67,7 @@ CMD ["node", "web/server.js"]
 # seed and the local auth gateway. Synthetic providers only; never used for deployments.
 FROM app AS local
 USER root
-COPY scripts/seed-users.ts scripts/seed-backend.ts ./scripts/
+COPY scripts/seed-users.ts scripts/seed-provision.ts scripts/seed-backend.ts ./scripts/
 COPY scripts/local/gateway.mjs ./scripts/local/
 COPY docker ./docker
 RUN mkdir -p /config /data/storage && chown app:app /config /data/storage

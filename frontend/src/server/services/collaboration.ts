@@ -2,9 +2,14 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { inWorkspace, assertActiveMembers } from './context';
 import { AppError, notFound } from '../errors';
-import { backendForWorkspace } from '../backend/client';
+import { BackendError, createBackendClient } from '../backend/client';
+import { backendConfig } from '../backend/config';
+import { backendIdentity, type BackendIdentity } from '../backend/context';
+import type { components } from '../backend/schema';
+import { backendFetch } from '../backend/transport';
 import type { Tx } from '../db';
 
+import { quoteFor } from '@/lib/comment-anchors';
 import type { ReviewerRole } from '@/lib/review-roles';
 import { mentionedNames } from '@/lib/mentions';
 export { REVIEWER_ROLES, REVIEWER_ROLE_LABELS, type ReviewerRole } from '@/lib/review-roles';
@@ -30,8 +35,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Loads the question through the backend, which scopes it to this business's organisation. */
 async function backendQuestion(userId: string, workspaceId: string, questionId: string) {
   if (!uuid.test(questionId)) throw notFound('Question');
-  const client = await backendForWorkspace(userId, workspaceId);
-  return { client, question: await client.get('/questions/{question_id}', { question_id: questionId }) };
+  const identity = await backendIdentity(userId, workspaceId);
+  const client = createBackendClient(identity);
+  return { client, identity, question: await client.get('/questions/{question_id}', { question_id: questionId }) };
 }
 
 type Member = { userId: string; displayName: string };
@@ -114,6 +120,11 @@ export async function removeReviewer(userId: string, workspaceId: string, questi
 }
 
 // --- Anchored comments ---------------------------------------------------------------------
+//
+// The backend is the record. Every message is first written through POST /questions/{id}/comments,
+// which stores the comments row and a comment_added event with the actor; only then does the
+// sidecar keep the anchor, the thread and the backend comment id. Messages are hidden, never
+// deleted, so the sidecar never disagrees with the backend about what was said.
 
 export async function listCommentThreads(userId: string, workspaceId: string, questionId: string): Promise<CommentThread[]> {
   await backendQuestion(userId, workspaceId, questionId);
@@ -130,13 +141,17 @@ export async function listCommentThreads(userId: string, workspaceId: string, qu
       ? await tx<(CommentMessage & { threadId: string })[]>`
           select c.id, c.thread_id, c.author_id, p.display_name as author_name, c.body, c.created_at
           from app.comment_messages c join app.profiles p on p.user_id = c.author_id
-          where c.workspace_id = ${workspaceId} and c.thread_id in ${tx(threads.map((t) => t.id))}
+          where c.workspace_id = ${workspaceId} and c.thread_id in ${tx(threads.map((t) => t.id))} and c.hidden_at is null
           order by c.created_at`
       : [];
-    return threads.map((t) => ({
-      ...t,
-      messages: messages.filter((m) => m.threadId === t.id).map(({ threadId: _, ...m }) => m),
-    }));
+    // A thread whose every message has been hidden disappears with its highlight; its rows and
+    // the backend comments remain.
+    return threads
+      .map((t) => ({
+        ...t,
+        messages: messages.filter((m) => m.threadId === t.id).map(({ threadId: _, ...m }) => m),
+      }))
+      .filter((t) => t.messages.length > 0);
   });
 }
 
@@ -146,6 +161,54 @@ function validAnchor(anchor: Anchor, segments: { text: string }[]): boolean {
     Number.isInteger(p.segment) && Number.isInteger(p.offset) && p.segment >= 0 && p.segment < segments.length &&
     p.offset >= 0 && p.offset <= segments[p.segment].text.length;
   return inside(start) && inside(end) && (start.segment < end.segment || (start.segment === end.segment && start.offset < end.offset));
+}
+
+const QUOTE_LIMIT = 120;
+
+/** The commented words as they appear in the backend record: whitespace collapsed, cut at a word when long. */
+export function truncateQuote(quote: string, limit = QUOTE_LIMIT): string {
+  const flat = quote.replace(/\s+/g, ' ').trim();
+  if (flat.length <= limit) return flat;
+  const cut = flat.slice(0, limit);
+  const atWord = cut.lastIndexOf(' ');
+  return `${(atWord >= limit * 0.6 ? cut.slice(0, atWord) : cut).trimEnd()}…`;
+}
+
+/**
+ * The text written to the backend comments endpoint. The thread reference ties every message of
+ * a thread together in the event log, and the quoted words say what the thread is about without
+ * anyone having to open Ten.
+ */
+export function backendCommentText(threadId: string, quote: string | null, body: string): string {
+  const reference = `[thread ${threadId}]`;
+  const trimmed = body.trim();
+  return quote?.trim() ? `${reference} “${truncateQuote(quote)}”: ${trimmed}` : `${reference} ${trimmed}`;
+}
+
+/** Writes the comment into the backend record and returns the backend comment id. Throws on any failure. */
+async function recordBackendComment(identity: BackendIdentity, questionId: string, text: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await backendFetch(backendConfig(), identity, `/questions/${questionId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      contentType: 'application/json',
+    });
+  } catch (error) {
+    if (error instanceof TypeError) throw new AppError('AI_UNAVAILABLE', 'The backend is unavailable. Your comment was not saved; please try again.');
+    throw error;
+  }
+  if (!response.ok) throw new BackendError(response.status, await response.json().catch(() => ({})));
+  const comment = (await response.json()) as components['schemas']['CommentRecord'];
+  if (typeof comment?.id !== 'string' || !uuid.test(comment.id)) throw new BackendError(502, { detail: 'The backend did not return the comment it saved.' });
+  return comment.id;
+}
+
+/** The words an anchor covers in one answer version, or null when that version cannot be read. */
+async function anchoredQuote(client: ReturnType<typeof createBackendClient>, questionId: string, answerId: string, anchor: Anchor) {
+  const versions = await client.get('/questions/{question_id}/answers', { question_id: questionId });
+  const version = versions.find((v) => v.id === answerId);
+  return { version, quote: version ? quoteFor(version.segments ?? [], anchor) : null };
 }
 
 /** People to tell about a comment: the owner, reviewers, earlier participants and anyone @mentioned. */
@@ -182,20 +245,22 @@ export async function createCommentThread(
   questionId: string,
   input: { answerId: string; anchor: Anchor; body: string },
 ) {
-  const { client, question } = await backendQuestion(userId, workspaceId, questionId);
-  const versions = await client.get('/questions/{question_id}/answers', { question_id: questionId });
-  const version = versions.find((v) => v.id === input.answerId);
+  const { client, identity, question } = await backendQuestion(userId, workspaceId, questionId);
+  const { version, quote } = await anchoredQuote(client, questionId, input.answerId, input.anchor);
   if (!version) throw notFound('Answer version');
   if (!validAnchor(input.anchor, version.segments ?? []))
     throw new AppError('VALIDATION_FAILED', 'Select text inside the answer before commenting.');
+  // The thread id is chosen here so the backend record can carry it before the sidecar row exists.
+  const threadId = randomUUID();
+  const backendCommentId = await recordBackendComment(identity, questionId, backendCommentText(threadId, quote, input.body));
   return inWorkspace(userId, workspaceId, async (tx, me) => {
     const [thread] = await tx<{ id: string }[]>`
-      insert into app.comment_threads (workspace_id, tender_id, question_id, answer_id, anchor, created_by)
-      values (${workspaceId}, ${question.tender_id}, ${questionId}, ${input.answerId}, ${tx.json(input.anchor)}, ${userId})
+      insert into app.comment_threads (id, workspace_id, tender_id, question_id, answer_id, anchor, created_by)
+      values (${threadId}, ${workspaceId}, ${question.tender_id}, ${questionId}, ${input.answerId}, ${tx.json(input.anchor)}, ${userId})
       returning id`;
     const [message] = await tx<{ id: string }[]>`
-      insert into app.comment_messages (thread_id, workspace_id, author_id, body)
-      values (${thread.id}, ${workspaceId}, ${userId}, ${input.body}) returning id`;
+      insert into app.comment_messages (thread_id, workspace_id, author_id, body, backend_comment_id)
+      values (${thread.id}, ${workspaceId}, ${userId}, ${input.body}, ${backendCommentId}) returning id`;
     await notify(tx, workspaceId, userId, await commentRecipients(tx, workspaceId, question, input.body, [], me.displayName, false), question, message.id);
     return { id: thread.id };
   });
@@ -203,19 +268,22 @@ export async function createCommentThread(
 
 async function loadThread(tx: Tx, workspaceId: string, threadId: string) {
   if (!uuid.test(threadId)) throw notFound('Comment');
-  const [thread] = await tx<{ id: string; questionId: string; tenderId: string }[]>`
-    select id, question_id, tender_id from app.comment_threads where id = ${threadId} and workspace_id = ${workspaceId}`;
+  const [thread] = await tx<{ id: string; questionId: string; tenderId: string; answerId: string; anchor: Anchor }[]>`
+    select id, question_id, tender_id, answer_id, anchor from app.comment_threads where id = ${threadId} and workspace_id = ${workspaceId}`;
   if (!thread) throw notFound('Comment');
   return thread;
 }
 
 export async function replyToThread(userId: string, workspaceId: string, threadId: string, body: string) {
-  const { questionId } = await inWorkspace(userId, workspaceId, (tx) => loadThread(tx, workspaceId, threadId));
-  const { question } = await backendQuestion(userId, workspaceId, questionId);
+  const thread = await inWorkspace(userId, workspaceId, (tx) => loadThread(tx, workspaceId, threadId));
+  const { client, identity, question } = await backendQuestion(userId, workspaceId, thread.questionId);
+  // The quote is best effort on a reply: the version is normally still there, but the reference alone is enough.
+  const { quote } = await anchoredQuote(client, thread.questionId, thread.answerId, thread.anchor);
+  const backendCommentId = await recordBackendComment(identity, thread.questionId, backendCommentText(threadId, quote, body));
   return inWorkspace(userId, workspaceId, async (tx, me) => {
     const [message] = await tx<{ id: string }[]>`
-      insert into app.comment_messages (thread_id, workspace_id, author_id, body)
-      values (${threadId}, ${workspaceId}, ${userId}, ${body}) returning id`;
+      insert into app.comment_messages (thread_id, workspace_id, author_id, body, backend_comment_id)
+      values (${threadId}, ${workspaceId}, ${userId}, ${body}, ${backendCommentId}) returning id`;
     // Replying reopens a resolved thread, as in shared document editors.
     await tx`update app.comment_threads set resolved_at = null, resolved_by = null where id = ${threadId} and resolved_at is not null`;
     const participants = await tx<{ authorId: string }[]>`select distinct author_id from app.comment_messages where thread_id = ${threadId}`;
@@ -235,16 +303,18 @@ export async function setThreadResolved(userId: string, workspaceId: string, thr
   });
 }
 
+/**
+ * Hides one of your own messages from the Comments tab. Nothing is deleted: the sidecar row stays,
+ * and the backend comment and its comment_added event remain the record of what was said.
+ */
 export async function deleteCommentMessage(userId: string, workspaceId: string, messageId: string) {
   if (!uuid.test(messageId)) throw notFound('Comment');
   return inWorkspace(userId, workspaceId, async (tx) => {
     const [row] = await tx<{ threadId: string }[]>`
-      delete from app.comment_messages where id = ${messageId} and workspace_id = ${workspaceId} and author_id = ${userId}
+      update app.comment_messages set hidden_at = coalesce(hidden_at, now())
+      where id = ${messageId} and workspace_id = ${workspaceId} and author_id = ${userId}
       returning thread_id`;
-    if (!row) throw new AppError('FORBIDDEN', 'You can delete only your own comments.');
-    // A thread with no messages left disappears with its highlight.
-    await tx`delete from app.comment_threads t where t.id = ${row.threadId}
-             and not exists (select 1 from app.comment_messages c where c.thread_id = t.id)`;
+    if (!row) throw new AppError('FORBIDDEN', 'You can remove only your own comments.');
     return { deleted: true };
   });
 }

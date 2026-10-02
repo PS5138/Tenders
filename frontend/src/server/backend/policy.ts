@@ -53,14 +53,46 @@ export function browserIdentityHeader(headers: Headers): string | undefined {
   return ['x-actor', 'x-org-id', 'authorization', 'proxy-authorization'].find((name) => headers.has(name));
 }
 
+/** The origin of the configured APP_URL. Credentials, path and query never reach a response. */
+export function configuredOrigin(appUrl: string): string | null {
+  try {
+    return new URL(appUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+function describeOrigin(received: string | null): string {
+  if (received === null) return 'no Origin header';
+  // A printable, bounded value: the header is reflected into the refusal.
+  const printable = received.replace(/[^\x20-\x7e]/g, '').slice(0, 200);
+  return printable ? `the origin ${printable}` : 'an unreadable Origin header';
+}
+
+/**
+ * Why a write would be refused, or null when it may proceed. The message names the origin the
+ * browser sent and the address the app is configured for, so a mismatched APP_URL on a laptop or
+ * a host reached through an unexpected name is a one-line fix rather than a mystery.
+ */
+export function mutationOriginProblem(headers: Headers, appUrl: string): string | null {
+  if (headers.get('x-ten-request') !== '1') return 'This request must come from the Ten application.';
+  const expected = configuredOrigin(appUrl);
+  const received = headers.get('origin');
+  let origin: string | null = null;
+  try {
+    origin = new URL(received ?? '').origin;
+  } catch {
+    origin = null;
+  }
+  if (expected && origin === expected) return null;
+  return expected
+    ? `This change was refused because it came from ${describeOrigin(received)}, but Ten is configured for ${expected} (APP_URL). Open the app at ${expected}, or set APP_URL to the address you use.`
+    : 'This change was refused because APP_URL is not a valid URL. Set APP_URL to the address you open the app at.';
+}
+
 export function isSameOriginMutation(request: Request, appUrl: string): boolean {
   if (['GET', 'HEAD'].includes(request.method)) return true;
-  if (request.headers.get('x-ten-request') !== '1') return false;
-  try {
-    return new URL(request.headers.get('origin') ?? '').origin === new URL(appUrl).origin;
-  } catch {
-    return false;
-  }
+  return mutationOriginProblem(request.headers, appUrl) === null;
 }
 
 export function validActor(name: string): boolean {

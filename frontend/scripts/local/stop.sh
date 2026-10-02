@@ -7,5 +7,5 @@ for pidfile in "$LOCAL_DIR"/run/*.pid; do
   kill "$(cat "$pidfile")" 2>/dev/null
   rm -f "$pidfile"
 done
-"${PG_AS[@]}" "$PG_BIN/pg_ctl" -D "$PG_DATA" -m fast stop >/dev/null 2>&1 && echo "Postgres stopped"
+${PG_AS[@]+"${PG_AS[@]}"} "$PG_BIN/pg_ctl" -D "$PG_DATA" -m fast stop >/dev/null 2>&1 && echo "Postgres stopped"
 echo "Local stack stopped"

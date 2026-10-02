@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -97,6 +97,156 @@ async def test_unknown_organisation_is_refused_before_anything_is_written(
     )
     assert tender_upload.status_code == 404
     assert _stored_files() == before
+
+
+def test_upload_limit_defaults_to_25_mib() -> None:
+    from app.config import Settings
+
+    assert Settings().max_upload_bytes == 25 * 1024 * 1024
+
+
+def test_upload_limit_message_states_the_limit_without_rounding_up() -> None:
+    """One sentence and one formatter, shared with the Next.js proxy: whole MiB as a whole
+    number, otherwise one decimal, never rounded up."""
+    from app.api.documents import format_upload_limit, upload_limit_message
+
+    mib = 1024 * 1024
+    assert format_upload_limit(25 * mib) == "25"
+    assert format_upload_limit(mib) == "1"
+    assert format_upload_limit(mib + mib // 2) == "1.5"
+    assert format_upload_limit(int(1.56 * mib)) == "1.5", "floored, not rounded to 1.6"
+    assert format_upload_limit(int(2.5 * mib)) == "2.5"
+    assert format_upload_limit(1024) == "0", "sub-0.1 MiB limits floor to zero rather than lie"
+    assert (
+        upload_limit_message(25 * mib)
+        == "This file is too large. Uploads are limited to 25 MB."
+    )
+    assert "too large" in upload_limit_message(mib + mib // 2)
+
+
+async def test_empty_upload_is_refused_with_its_own_message_even_in_synthetic_demo(
+    app_client: httpx.AsyncClient, db_session: Session, settings_override
+) -> None:
+    """``read_upload`` answers 422 for a zero-byte file before the synthetic checksum gate,
+    so the demo stack says the file is empty rather than that it is not a synthetic file."""
+    settings_override(synthetic_demo="true")
+    before = _stored_files()
+    empty = await app_client.post("/documents", files={"file": ("empty.docx", b"")})
+    assert empty.status_code == 422, empty.text
+    assert empty.json()["detail"] == "The uploaded file is empty."
+    assert _stored_files() == before
+
+
+async def test_upload_over_the_byte_limit_is_refused_before_anything_is_written(
+    app_client: httpx.AsyncClient, db_session: Session, settings_override
+) -> None:
+    """One byte over ``MAX_UPLOAD_BYTES`` is 413 with the limit in MB, and nothing is
+    persisted: no file, no document row, no job. A file exactly at the limit is accepted."""
+    limit = 1024 * 1024
+    settings_override(max_upload_bytes=limit)
+    before_files = _stored_files()
+    before_documents = db_session.scalar(select(func.count()).select_from(Document))
+    before_jobs = db_session.scalar(select(func.count()).select_from(Job))
+
+    too_large = await app_client.post(
+        "/documents", files={"file": ("huge.docx", b"x" * (limit + 1), "application/octet-stream")}
+    )
+    assert too_large.status_code == 413, too_large.text
+    assert too_large.json()["detail"] == "This file is too large. Uploads are limited to 1 MB."
+    assert _stored_files() == before_files, "no orphan file for a refused upload"
+    assert db_session.scalar(select(func.count()).select_from(Document)) == before_documents
+    assert db_session.scalar(select(func.count()).select_from(Job)) == before_jobs
+
+    at_limit = await app_client.post(
+        "/documents", files={"file": ("fits.docx", b"y" * limit, "application/octet-stream")}
+    )
+    assert at_limit.status_code == 202, at_limit.text
+    document = db_session.get(Document, uuid.UUID(at_limit.json()["id"]))
+    assert Path(document.storage_path).stat().st_size == limit
+
+
+def _multipart_file(boundary: str, filename: str, content: bytes) -> bytes:
+    head = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ).encode()
+    return head + content + f"\r\n--{boundary}--\r\n".encode()
+
+
+async def test_oversized_upload_body_is_refused_before_it_is_spooled(
+    app_client: httpx.AsyncClient, db_session: Session, settings_override
+) -> None:
+    """``UploadBodyLimit`` bounds the request body itself, not only the parsed file: an
+    honest ``Content-Length`` over the limit is 413 with no body byte read, and a chunked
+    body with no ``Content-Length`` is cut off once it passes the limit plus the multipart
+    allowance, long before all of it has been consumed. Nothing is written either way."""
+    from app.main import MULTIPART_OVERHEAD_BYTES, app
+
+    limit = 1024 * 1024
+    settings_override(max_upload_bytes=limit)
+    before_files = _stored_files()
+    before_documents = db_session.scalar(select(func.count()).select_from(Document))
+    tender = Tender(org_id=ORG, name="T")
+    db_session.add(tender)
+    db_session.flush()
+
+    delivered = 0  # body bytes the application actually pulled from the server
+
+    async def counting(scope, receive, send):  # noqa: ANN001
+        async def counted():
+            nonlocal delivered
+            message = await receive()
+            if message["type"] == "http.request":
+                delivered += len(message.get("body", b""))
+            return message
+
+        await app(scope, counted, send)
+
+    huge = b"x" * (4 * limit)
+    expected = "This file is too large. Uploads are limited to 1 MB."
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=counting),
+        base_url="http://testserver",
+        headers={"X-Actor": "test user"},
+    ) as client:
+        # httpx declares Content-Length for a multipart upload: refused without reading.
+        declared = await client.post(
+            f"/tenders/{tender.id}/documents",
+            data={"tender_doc_kind": "specification"},
+            files={"file": ("huge.docx", huge, "application/octet-stream")},
+        )
+        assert declared.status_code == 413, declared.text
+        assert declared.json()["detail"] == expected
+        assert delivered == 0, "an honest Content-Length over the limit costs no body bytes"
+
+        # A streamed body carries Transfer-Encoding: chunked and no Content-Length.
+        body = _multipart_file("upload-limit-test", "huge.docx", huge)
+        chunk = 64 * 1024
+
+        async def chunks():
+            for start in range(0, len(body), chunk):
+                yield body[start : start + chunk]
+
+        streamed = await client.post(
+            "/documents",
+            content=chunks(),
+            headers={"Content-Type": "multipart/form-data; boundary=upload-limit-test"},
+        )
+        assert streamed.status_code == 413, streamed.text
+        assert streamed.json()["detail"] == expected
+        assert 0 < delivered < len(body), "the request ended before the body was consumed"
+        assert delivered <= limit + MULTIPART_OVERHEAD_BYTES + chunk, "cut off within one chunk"
+
+        # The guard sits inside the service-secret check: an unauthenticated caller is 401.
+        settings_override(max_upload_bytes=limit, service_secret="x" * 32)
+        unauthenticated = await client.post(
+            "/documents", files={"file": ("huge.docx", huge, "application/octet-stream")}
+        )
+        assert unauthenticated.status_code == 401
+
+    assert _stored_files() == before_files
+    assert db_session.scalar(select(func.count()).select_from(Document)) == before_documents
 
 
 def test_discard_upload_removes_the_file_and_its_empty_directory(tmp_path: Path) -> None:

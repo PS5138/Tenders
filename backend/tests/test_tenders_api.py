@@ -11,12 +11,12 @@ from pathlib import Path
 import httpx
 import pytest
 from openpyxl import Workbook
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api import tenders as tenders_api
-from app.config import DEFAULT_ORG_ID
-from app.db.models import Answer, Document, Job, Question, Tender, Thread
+from app.config import DEFAULT_ORG_ID, get_settings
+from app.db.models import Answer, Document, Event, Job, Question, Tender, Thread
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -275,6 +275,73 @@ async def test_upload_other_tender_document_enqueues_parse_only_ingest(
     assert missing.status_code == 404
 
 
+async def test_upload_tender_document_over_the_byte_limit_is_refused(
+    app_client: httpx.AsyncClient, db_session: Session, settings_override
+) -> None:
+    """The tender route shares the bounded read: one byte over ``MAX_UPLOAD_BYTES`` is 413
+    naming the limit in MB and persists nothing; a file at the limit is accepted."""
+    limit = 1024 * 1024
+    settings_override(max_upload_bytes=limit)
+    created = await create_tender(app_client)
+    storage = Path(get_settings().storage_path)
+    before_files = {path for path in storage.rglob("*") if path.is_file()}
+    before_jobs = db_session.scalar(select(func.count()).select_from(Job))
+
+    too_large = await app_client.post(
+        f"/tenders/{created['id']}/documents",
+        data={"tender_doc_kind": "specification"},
+        files={"file": ("huge.docx", b"x" * (limit + 1), DOCX_TYPE)},
+    )
+    assert too_large.status_code == 413, too_large.text
+    assert too_large.json()["detail"] == "This file is too large. Uploads are limited to 1 MB."
+    assert {path for path in storage.rglob("*") if path.is_file()} == before_files
+    assert db_session.scalar(select(func.count()).select_from(Job)) == before_jobs
+    assert (await app_client.get(f"/tenders/{created['id']}")).json()["documents"] == []
+
+    at_limit = await app_client.post(
+        f"/tenders/{created['id']}/documents",
+        data={"tender_doc_kind": "specification"},
+        files={"file": ("fits.docx", b"y" * limit, DOCX_TYPE)},
+    )
+    assert at_limit.status_code == 202, at_limit.text
+    assert Path(at_limit.json()["storage_path"]).stat().st_size == limit
+
+
+async def test_upload_empty_tender_document_is_refused_before_anything_is_written(
+    app_client: httpx.AsyncClient, db_session: Session
+) -> None:
+    """A zero-byte upload is 422 from the shared bounded read, for a question pack and for
+    any other kind: no file, no document, no job, and the tender's one question-pack slot is
+    still free, so the real pack is accepted afterwards."""
+    created = await create_tender(app_client)
+    storage = Path(get_settings().storage_path)
+    before_files = {path for path in storage.rglob("*") if path.is_file()}
+    before_jobs = db_session.scalar(select(func.count()).select_from(Job))
+
+    for kind in ("question_pack", "specification"):
+        empty = await app_client.post(
+            f"/tenders/{created['id']}/documents",
+            data={"tender_doc_kind": kind},
+            files={"file": ("empty.xlsx", b"", "application/octet-stream")},
+        )
+        assert empty.status_code == 422, (kind, empty.text)
+        assert empty.json()["detail"] == "The uploaded file is empty."
+
+    assert {path for path in storage.rglob("*") if path.is_file()} == before_files
+    assert db_session.scalar(select(func.count()).select_from(Job)) == before_jobs
+    detail = (await app_client.get(f"/tenders/{created['id']}")).json()
+    assert detail["documents"] == []
+    assert detail["extract_job_id"] is None
+
+    accepted = await app_client.post(
+        f"/tenders/{created['id']}/documents",
+        data={"tender_doc_kind": "question_pack"},
+        files={"file": ("pack.xlsx", xlsx_bytes(), "application/octet-stream")},
+    )
+    assert accepted.status_code == 202, accepted.text
+    assert (await app_client.get(f"/tenders/{created['id']}")).json()["extract_job_id"]
+
+
 # --- Jobs started from the tender ----------------------------------------------------------------
 
 
@@ -338,6 +405,94 @@ async def test_submit_marks_submitted_once(
 
     again = await app_client.post(f"/tenders/{created['id']}/submit")
     assert again.status_code == 409
+
+
+def _submitted_events(session: Session, tender_id: uuid.UUID) -> list[Event]:
+    return list(
+        session.scalars(
+            select(Event).where(
+                Event.entity_id == tender_id, Event.event_type == "tender_submitted"
+            )
+        )
+    )
+
+
+async def test_submit_never_doubles_as_an_unarchive(
+    app_client: httpx.AsyncClient, db_session: Session
+) -> None:
+    """A submitted tender that was archived keeps its one submission (409, one event, still
+    archived); an archived tender that was never submitted is told to restore it first."""
+    created = await create_tender(app_client)
+    tender_id = uuid.UUID(created["id"])
+    assert (await app_client.post(f"/tenders/{tender_id}/submit")).status_code == 200
+    archived = await app_client.patch(f"/tenders/{tender_id}", json={"status": "archived"})
+    assert archived.json()["status"] == "archived"
+
+    again = await app_client.post(f"/tenders/{tender_id}/submit")
+    assert again.status_code == 409, again.text
+    assert "already been submitted" in again.json()["detail"]
+    assert len(_submitted_events(db_session, tender_id)) == 1
+    tender = db_session.get(Tender, tender_id)
+    db_session.refresh(tender)
+    assert tender.status == "archived", "submit did not restore the tender"
+
+    never_submitted = await create_tender(app_client, name="Archived, never submitted")
+    other_id = uuid.UUID(never_submitted["id"])
+    await app_client.patch(f"/tenders/{other_id}", json={"status": "archived"})
+    refused = await app_client.post(f"/tenders/{other_id}/submit")
+    assert refused.status_code == 409, refused.text
+    assert "Restore the tender first" in refused.json()["detail"]
+    other = db_session.get(Tender, other_id)
+    db_session.refresh(other)
+    assert other.status == "archived" and other.submitted_at is None
+    assert _submitted_events(db_session, other_id) == []
+
+    restored = await app_client.patch(f"/tenders/{other_id}", json={"status": "open"})
+    assert restored.json()["status"] == "open"
+    assert (await app_client.post(f"/tenders/{other_id}/submit")).status_code == 200
+
+
+# --- Delete guards --------------------------------------------------------------------------------
+
+
+async def test_delete_waits_for_parse_only_ingests_and_streaming_replies(
+    app_client: httpx.AsyncClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A queued ``ingest_document`` job for one of the tender's documents carries no
+    ``tender_id``, so the guard matches on ``document_id``; a reply streaming on one of the
+    tender's threads blocks too; with neither, the delete goes through."""
+    from app.generate import runner
+
+    created = await create_tender(app_client)
+    tender_id = uuid.UUID(created["id"])
+    seed_questions(db_session, tender_id)
+    upload = await app_client.post(
+        f"/tenders/{tender_id}/documents",
+        data={"tender_doc_kind": "specification"},
+        files={"file": ("spec.docx", b"specification bytes", DOCX_TYPE)},
+    )
+    assert upload.status_code == 202, upload.text
+    job = db_session.get(Job, uuid.UUID(upload.json()["job_id"]))
+    assert job.kind == "ingest_document" and "tender_id" not in job.payload
+
+    refused = await app_client.delete(f"/tenders/{tender_id}")
+    assert refused.status_code == 409, refused.text
+    assert "still being processed" in refused.json()["detail"]
+    assert db_session.get(Tender, tender_id) is not None
+
+    job.status = "done"
+    db_session.flush()
+    thread_id = db_session.scalars(select(Thread.id).where(Thread.tender_id == tender_id)).first()
+    assert thread_id is not None
+    monkeypatch.setattr(runner, "reply_in_progress", lambda key: str(key) == str(thread_id))
+    refused = await app_client.delete(f"/tenders/{tender_id}")
+    assert refused.status_code == 409, refused.text
+    assert "still being processed" in refused.json()["detail"]
+    assert db_session.get(Tender, tender_id) is not None
+
+    monkeypatch.setattr(runner, "reply_in_progress", lambda key: False)
+    assert (await app_client.delete(f"/tenders/{tender_id}")).status_code == 204
+    assert (await app_client.get(f"/tenders/{tender_id}")).status_code == 404
 
 
 async def test_export_streams_bytes_and_maps_blocked_to_409(

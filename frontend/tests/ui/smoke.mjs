@@ -31,7 +31,18 @@ const tender = {
   needs_review_count: 1,
   c_count: 0,
   unclassified_mandatory_count: 0,
-  documents: [],
+  // A question pack must be present for the workspace to show its views rather than the upload step.
+  documents: [
+    {
+      id: '00000000-0000-4000-8000-0000000000d1',
+      filename: 'question_pack.xlsx',
+      tender_doc_kind: 'question_pack',
+      ingest_status: 'ready',
+      doc_type: null,
+      classification_confirmed: false,
+      created_at: new Date().toISOString(),
+    },
+  ],
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -42,7 +53,7 @@ const shell = {
   openReviewCount: 1,
   unreadNotificationCount: 0,
 };
-const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {AppShell} from './src/features/shell/app-shell';import {QuestionWorkspace} from './src/features/backend/question';import {TenderWorkspace} from './src/features/backend/tenders';import {Library} from './src/features/backend/library';import {BuyerForms} from './src/features/backend/forms';const screen=new URLSearchParams(location.search).get('screen');const props={workspaceId:${JSON.stringify(ws)},tenderId:${JSON.stringify(q.tender_id)}};createRoot(document.getElementById('root')).render(<AppShell shell={${JSON.stringify(shell)}} ai={{status:'ok',llm_provider:'fake',embedding_provider:'fake',synthetic_demo:true}}>{screen==='tender'?<TenderWorkspace {...props}/>:screen==='library'?<Library workspaceId={props.workspaceId}/>:screen==='forms'?<BuyerForms {...props}/>:<QuestionWorkspace {...props} questionId=${JSON.stringify(q.id)} members={[{userId:props.workspaceId,displayName:'Test writer'}]}/>}</AppShell>);`;
+const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {AppShell} from './src/features/shell/app-shell';import {QuestionWorkspace} from './src/features/backend/question';import {TenderWorkspace} from './src/features/backend/tenders';import {Library} from './src/features/backend/library';import {BuyerForms} from './src/features/backend/forms';const screen=new URLSearchParams(location.search).get('screen');const props={workspaceId:${JSON.stringify(ws)},tenderId:${JSON.stringify(q.tender_id)}};const members=[{userId:props.workspaceId,displayName:'Test writer'}];createRoot(document.getElementById('root')).render(<AppShell shell={${JSON.stringify(shell)}} ai={{status:'ok',llm_provider:'fake',embedding_provider:'fake',synthetic_demo:true}}>{screen==='tender'?<TenderWorkspace {...props} members={members}/>:screen==='library'?<Library workspaceId={props.workspaceId}/>:screen==='forms'?<BuyerForms {...props}/>:<QuestionWorkspace {...props} questionId=${JSON.stringify(q.id)} members={members}/>}</AppShell>);`;
 await build({
   stdin: { contents: entry, resolveDir: root, sourcefile: 'ui-smoke.tsx', loader: 'tsx' },
   bundle: true,
@@ -53,12 +64,18 @@ await build({
     {
       name: 'navigation-stub',
       setup(build) {
-        build.onResolve({ filter: /^next\/(link|navigation)$/ }, (args) => ({ path: args.path, namespace: 'stub' }));
+        // AppShell is a server component that reads APP_URL; in this browser bundle the configured
+        // origin is the harness's own, so the address-mismatch notice stays out of the rendering checks.
+        build.onResolve({ filter: /^(next\/(link|navigation)|server-only|@\/server\/env)$/ }, (args) => ({ path: args.path, namespace: 'stub' }));
         build.onLoad({ filter: /.*/, namespace: 'stub' }, (args) => ({
           contents:
             args.path === 'next/link'
               ? `import React from 'react';export default function Link({href,children,...props}){return React.createElement('a',{href,...props},children)}`
-              : `export const useRouter=()=>({push:()=>{},refresh:()=>{}});export const usePathname=()=>'/w/${ws}/tenders';`,
+              : args.path === 'server-only'
+                ? ''
+                : args.path === '@/server/env'
+                  ? `export const env=()=>({APP_URL:location.origin});`
+                  : `export const useRouter=()=>({push:()=>{},refresh:()=>{}});export const usePathname=()=>'/w/${ws}/tenders';`,
           loader: 'js',
           resolveDir: root,
         }));
@@ -66,10 +83,18 @@ await build({
     },
   ],
 });
-const cssDir = path.join(root, '.next/static/css');
-const css = (
-  await Promise.all((await readdir(cssDir)).filter((f) => f.endsWith('.css')).map((f) => readFile(path.join(cssDir, f), 'utf8')))
-).join('\n');
+// Webpack builds write stylesheets to .next/static/css, Turbopack builds to .next/static/chunks.
+const cssFiles = (
+  await Promise.all(
+    ['.next/static/css', '.next/static/chunks'].map(async (dir) => {
+      const full = path.join(root, dir);
+      const names = await readdir(full).catch(() => []);
+      return names.filter((f) => f.endsWith('.css')).map((f) => path.join(full, f));
+    }),
+  )
+).flat();
+assert(cssFiles.length, 'No stylesheet found under .next/static; run `pnpm build` first.');
+const css = (await Promise.all(cssFiles.map((f) => readFile(f, 'utf8')))).join('\n');
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
@@ -95,11 +120,9 @@ const server = http.createServer(async (req, res) => {
       else if (!endpoint)
         data = {
           ok: true,
-          data: url.pathname.endsWith('/forms')
+          data: ['/forms', '/notifications', '/comments', '/reviewers'].some((suffix) => url.pathname.endsWith(suffix))
             ? []
-            : url.pathname.endsWith('/notifications')
-              ? []
-              : { openReviewCount: 1, unreadNotificationCount: 0 },
+            : { openReviewCount: 1, unreadNotificationCount: 0 },
         };
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(data));
@@ -129,24 +152,54 @@ try {
       await page.goto(`http://127.0.0.1:${server.address().port}/?screen=${screen}`);
       await page.locator('h1').first().waitFor();
       if (screen === 'question') {
-        await page
-          .getByRole('button', { name: /Sentence 1:/ })
-          .first()
-          .waitFor();
-        await page
-          .getByRole('button', { name: /Sentence 1:/ })
-          .first()
-          .click();
-        const source = page.getByRole('dialog').getByRole('button').first();
-        if (await source.count()) {
-          await source.click();
-          await page.getByRole('complementary', { name: 'Source section' }).waitFor();
-        }
+        // Sentence 1 of the fixture has a located document source. Hover shows its popover with no click,
+        // and the popover is read from the segment record, so no section request is made.
+        const marker = page.getByRole('button', { name: /^Sentence 1:/ }).first();
+        await marker.waitFor();
+        const sectionRequests = [];
+        page.on('request', (request) => {
+          if (request.url().includes('/sections/')) sectionRequests.push(request.url());
+        });
+        await marker.hover();
+        const popover = page.getByRole('dialog', { name: 'Source for sentence 1' });
+        await popover.waitFor();
+        await popover.getByRole('button', { name: /^Verify source/ }).first().waitFor();
+        assert.equal(sectionRequests.length, 0, 'hovering a sentence must not request its section');
+        // Clicking the marker opens the source pane directly, scrolled so the highlighted span is in view.
+        await marker.click();
+        const pane = page.getByRole('complementary', { name: 'Source section' });
+        await pane.waitFor();
+        const mark = pane.locator('mark');
+        await mark.waitFor();
+        const inView = await mark.evaluate((el) => {
+          const box = el.closest('[data-testid="source-scroll"]').getBoundingClientRect();
+          const m = el.getBoundingClientRect();
+          return m.top >= box.top - 1 && m.bottom <= box.bottom + 1;
+        });
+        assert(inView, 'the source pane scrolls to the highlighted span');
         await page.keyboard.press('Escape');
+        // The n key jumps to the next sentence needing attention and focuses its marker.
+        await page.keyboard.press('n');
+        const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '');
+        assert.match(
+          focused,
+          /^Sentence \d+: (Weak|No supporting|Disputed|Written by a person)/,
+          `n must focus a sentence needing attention, focused "${focused}"`,
+        );
+        // Keyboard route to every source: focus opens the popover, the down arrow moves into it, so Tab
+        // reaches each "Verify source" button, and Escape brings the keyboard back to the marker.
+        await marker.focus();
+        await popover.waitFor();
+        await page.keyboard.press('ArrowDown');
+        const inPopover = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '');
+        assert.match(inPopover, /^Verify source/, `the down arrow must focus a Verify source button, focused "${inPopover}"`);
+        await page.keyboard.press('Escape');
+        await popover.waitFor({ state: 'hidden' });
+        assert(await marker.evaluate((el) => el === document.activeElement), 'Escape from the popover must return focus to the marker');
       }
       if (screen === 'tender') {
-        await page.getByRole('button', { name: 'table', exact: true }).click();
-        await page.locator('table').waitFor();
+        await page.getByRole('tab', { name: 'List', exact: true }).click();
+        await page.locator('main section ul li').first().waitFor();
       }
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       assert(overflow <= 1, `${screen} overflows ${width}px by ${overflow}px`);
@@ -158,7 +211,7 @@ try {
   }
   assert.deepEqual(errors, [], 'Browser runtime errors');
   console.log(
-    `${checks} browser rendering checks passed (four screens × four widths). Sign-in and mutations are not covered by this harness.`,
+    `${checks} browser rendering checks passed (four screens × four widths, with the hover, click-to-source, pane scroll, n-key and popover keyboard trace checks on the question screen). Sign-in and mutations are not covered by this harness.`,
   );
 } finally {
   await browser.close();

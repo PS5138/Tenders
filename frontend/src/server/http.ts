@@ -5,6 +5,7 @@ import { AppError, invalid } from './errors';
 import { requireUser, type SessionUser } from './auth';
 import { env } from './env';
 import { BackendError } from './backend/client';
+import { mutationOriginProblem } from './backend/policy';
 
 export type ApiError = { code: string; message: string; details?: unknown };
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -43,14 +44,8 @@ export function errorResponse(err: unknown): Response {
  * cannot set without a CORS preflight, and any Origin must match this app.
  */
 export async function assertSameOrigin(): Promise<void> {
-  const h = await headers();
-  if (h.get('x-ten-request') !== '1') {
-    throw new AppError('FORBIDDEN', 'This request must come from the Ten application.');
-  }
-  const origin = h.get('origin');
-  if (!origin || new URL(origin).origin !== new URL(env().APP_URL).origin) {
-    throw new AppError('FORBIDDEN', 'Cross-site requests are not allowed.');
-  }
+  const problem = mutationOriginProblem(await headers(), env().APP_URL);
+  if (problem) throw new AppError('FORBIDDEN', problem);
 }
 
 type Handler<T> = (ctx: { user: SessionUser }) => Promise<T>;

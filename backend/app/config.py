@@ -179,6 +179,10 @@ class Settings(BaseSettings):
     # Infrastructure
     database_url: str = "postgresql+psycopg://tenders:tenders@localhost:5432/tenders"
     storage_path: Path = REPO_ROOT / "storage"
+    # Largest file either upload route accepts, in bytes (default 25 MiB). Both routes read the
+    # upload in chunks and answer 413 as soon as the limit is passed, before the synthetic
+    # checksum, any storage write or the document row.
+    max_upload_bytes: int = 25 * 1024 * 1024
     docling_artifacts_path: Path | None = None
     default_org_id: uuid.UUID = DEFAULT_ORG_ID
     fixture_document_path: Path = REPO_ROOT / "eval" / "data" / "fixtures" / "fixture_document.json"

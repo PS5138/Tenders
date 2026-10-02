@@ -8,7 +8,9 @@ export class BackendRequestError extends Error {
         ? detail.detail
         : typeof detail.error === 'object' && detail.error && 'message' in detail.error
           ? String(detail.error.message)
-          : 'The request could not be completed.';
+          : status === 413
+            ? 'This file is too large.'
+            : 'The request could not be completed.';
     super(message);
   }
 }
@@ -17,10 +19,19 @@ export function backendUrl(workspaceId: string, path: string): string {
   return `/api/w/${encodeURIComponent(workspaceId)}/backend${path}`;
 }
 
-export async function backendRequest(workspaceId: string, path: string, method = 'GET', body?: unknown): Promise<Response> {
+export type BackendRequestOptions = { signal?: AbortSignal };
+
+export async function backendRequest(
+  workspaceId: string,
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  { signal }: BackendRequestOptions = {},
+): Promise<Response> {
   const multipart = body instanceof FormData;
   const response = await fetch(backendUrl(workspaceId, path), {
     method,
+    signal,
     credentials: 'same-origin',
     cache: 'no-store',
     headers: {
@@ -34,6 +45,12 @@ export async function backendRequest(workspaceId: string, path: string, method =
   return response;
 }
 
-export async function backendJson<T>(workspaceId: string, path: string, method = 'GET', body?: unknown): Promise<T> {
-  return (await backendRequest(workspaceId, path, method, body)).json();
+export async function backendJson<T>(
+  workspaceId: string,
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  options: BackendRequestOptions = {},
+): Promise<T> {
+  return (await backendRequest(workspaceId, path, method, body, options)).json();
 }

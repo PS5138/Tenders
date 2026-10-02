@@ -1,0 +1,39 @@
+# Live-provider override for the joined stack. Layer it over the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.live.yml up --build -d
+#
+# The base file defaults the backend to the fake providers with SYNTHETIC_DEMO=true, the
+# no-keys local stack. This file pins the three variables that must agree to their live values
+# on every backend service (migrate, api and worker share one configuration) and passes the
+# provider keys through from the shell or the repo-root .env. The API and the worker check the
+# three at start-up (backend/app/config.py, check_provider_configuration) and refuse to run
+# until they agree and the selected providers have keys, so a half-changed configuration is a
+# start-up message, not a failing first job.
+#
+# The frontend is unchanged: only port 3000 is published and web, frontend-provision and
+# frontend-seed stay in APP_MODE=development, because frontend-provision creates the
+# published-password development accounts and refuses to run under APP_MODE=demo
+# (frontend/scripts/seed-users.ts); frontend-seed loads the documents and the pack.
+# APP_MODE=demo is the hosted configuration in frontend/docs/deploy.md; it provisions its first
+# business with `pnpm business:create` instead of the seed and needs the hosted Supabase and
+# database variables listed there.
+
+x-live-env: &live-env
+  LLM_PROVIDER: anthropic
+  # openai (default) or voyage; the matching key below must be set.
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+  SYNTHETIC_DEMO: "false"
+  # A blank key reads as unset, and the API and worker then refuse to start with a plain message.
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+
+services:
+  migrate:
+    environment: *live-env
+
+  api:
+    environment: *live-env
+
+  worker:
+    environment: *live-env

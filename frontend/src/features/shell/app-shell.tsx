@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import type { ShellData } from '@/server/services/workspaces';
+import { env } from '@/server/env';
+import { configuredOrigin } from '@/server/backend/policy';
 import { Brand } from './brand';
+import { OriginNotice } from './origin-notice';
 import { ShellCountsProvider } from './shell-counts';
 import { SideNav } from './side-nav';
 import { TopBar } from './top-bar';
@@ -24,6 +27,8 @@ function AiModeBanner({ ai }: { ai: AiMode }) {
 }
 
 export function AppShell({ shell, ai, children }: { shell: ShellData; ai: AiMode; children: ReactNode }) {
+  // The origin only: APP_URL carries no secret, and the client compares it with the address bar.
+  const expectedOrigin = configuredOrigin(env().APP_URL);
   return (
     <ShellCountsProvider
       workspaceId={shell.workspace.id}
@@ -55,6 +60,7 @@ export function AppShell({ shell, ai, children }: { shell: ShellData; ai: AiMode
         </aside>
         <div className="min-w-0">
           <TopBar shell={shell} />
+          <OriginNotice expected={expectedOrigin} />
           <AiModeBanner ai={ai} />
           <main id="main" className="px-4 pb-10 pt-6 sm:px-6">
             {children}

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["/Users/parivrudh.sharma/Desktop/TENDERAUTOMATION/Tenders/backend/scripts/dev_up.sh"],
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/Users/parivrudh.sharma/.local/node/current/bin/pnpm",
+      "runtimeArgs": ["--dir", "/Users/parivrudh.sharma/Desktop/TENDERAUTOMATION/Tenders/frontend", "dev"],
+      "port": 3000
+    }
+  ]
+}

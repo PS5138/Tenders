@@ -17,6 +17,12 @@ const schema = z
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
     BACKEND_URL: z.string().url(),
     BACKEND_SERVICE_SECRET: z.string().optional(),
+    // Largest upload the proxy forwards to the backend (bytes); 25 MiB by default.
+    MAX_UPLOAD_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(25 * 1024 * 1024),
     // Hosted Supabase's transaction pooler (port 6543) does not support prepared statements.
     DATABASE_PREPARE: bool,
   })
