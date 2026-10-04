@@ -1,0 +1,8 @@
+{
+  "name": "ten-dev",
+  "private": true,
+  "description": "Repository-root entry point for the native development stack. The frontend's own package.json lives in frontend/.",
+  "scripts": {
+    "dev": "bash scripts/dev.sh"
+  }
+}

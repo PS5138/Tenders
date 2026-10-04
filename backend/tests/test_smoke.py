@@ -98,7 +98,7 @@ async def test_fixture_answer_satisfies_the_plan(
     assert answer.verbatim is not None and answer.verbatim.segments
     assert answer.verbatim_offer_item_id == answer.verbatim.source_item_id
     assert answer.support_summary.substantive > answer.support_summary.supported > 0
-    assert answer.prompt_version == "synthesis.v1"
+    assert answer.prompt_version == "synthesis.v2"
     assert answer.model == get_settings().model_main
 
     # Every locator resolves to a seeded fixture section and every located quote is exact.

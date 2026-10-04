@@ -96,8 +96,14 @@ async def test_patch_question(app_client: httpx.AsyncClient, db_session: Session
     )
     assert blocked.status_code == 409
     assert blocked.json()["blockers"] == [{"kind": "segment", "index": 1}]
+    # The other fields are never gated: they are applied with the refusal, and the 409 carries
+    # the row as it now stands. The status itself is unchanged.
+    assert blocked.json()["question"]["assignee"] == "Jane"
+    assert blocked.json()["question"]["status"] == "ai_draft"
     db_session.refresh(question)
-    assert question.assignee is None, "a blocked status writes nothing"
+    assert question.assignee == "Jane" and question.status == "ai_draft"
+    blocked_events = (await app_client.get(f"/questions/{question.id}/events")).json()
+    assert [event["event_type"] for event in blocked_events][0] == "assigned"
 
     ok = await app_client.patch(
         f"/questions/{question.id}",
@@ -116,7 +122,7 @@ async def test_patch_question(app_client: httpx.AsyncClient, db_session: Session
 
     events = (await app_client.get(f"/questions/{question.id}/events")).json()
     kinds = [event["event_type"] for event in events]
-    assert kinds[:3] == ["compliance_class_set", "assigned", "status_changed"], "newest first"
+    assert kinds[:3] == ["status_changed", "compliance_class_set", "assigned"], "newest first"
     assert all(event["actor"] == ACTOR for event in events[:3])
 
     system_only = await app_client.patch(f"/questions/{question.id}", json={"status": "ai_draft"})
@@ -237,6 +243,10 @@ async def test_attest_and_dispute_endpoints(
 
     missing_note = await app_client.post(f"/answers/{answer.id}/segments/0/dispute", json={})
     assert missing_note.status_code == 422
+    blank_note = await app_client.post(
+        f"/answers/{answer.id}/segments/0/dispute", json={"note": "   "}
+    )
+    assert blank_note.status_code == 422, "a note of only spaces is refused, not a 500"
     disputed = await app_client.post(
         f"/answers/{answer.id}/segments/0/dispute", json={"note": "Out of date."}
     )
@@ -276,8 +286,10 @@ async def test_acknowledge_gap_endpoint(app_client: httpx.AsyncClient, db_sessio
 async def test_comments(app_client: httpx.AsyncClient, db_session: Session) -> None:
     question = make_question(db_session)
     db_session.flush()
+    blank = await app_client.post(f"/questions/{question.id}/comments", json={"text": " \n "})
+    assert blank.status_code == 422
     created = await app_client.post(
-        f"/questions/{question.id}/comments", json={"text": "Check the DSPT year."}
+        f"/questions/{question.id}/comments", json={"text": "  Check the DSPT year. "}
     )
     assert created.status_code == 201, created.text
     assert created.json()["author"] == ACTOR and created.json()["text"] == "Check the DSPT year."
@@ -316,7 +328,7 @@ async def test_threads_and_save_as_answer(
         gaps=[],
         fact_checklist=[],
         model="claude-opus-5",
-        prompt_version="synthesis.v1",
+        prompt_version="synthesis.v2",
     )
     db_session.add(message)
     db_session.flush()
@@ -379,14 +391,15 @@ async def test_patch_echoing_a_system_only_status_is_a_no_op(
     assert echoed.json()["status"] == "not_started" and echoed.json()["assignee"] == "Jane"
     events = (await app_client.get(f"/questions/{fresh.id}/events")).json()
     assert [e["event_type"] for e in events] == ["assigned"]
-    # A different system-only target is still refused, and the refusal writes nothing.
+    # A different system-only target is still refused; the status stays put while the
+    # ungated assignee is applied.
     refused = await app_client.patch(
         f"/questions/{fresh.id}", json={"status": "ai_draft", "assignee": "Someone Else"}
     )
     assert refused.status_code == 409
     assert refused.json()["blockers"] == [{"kind": "system_only"}]
     db_session.refresh(fresh)
-    assert fresh.assignee == "Jane"
+    assert fresh.status == "not_started" and fresh.assignee == "Someone Else"
 
 
 async def test_save_as_answer_refuses_a_pricing_question(
@@ -406,7 +419,7 @@ async def test_save_as_answer_refuses_a_pricing_question(
         gaps=[],
         fact_checklist=[],
         model="claude-opus-5",
-        prompt_version="synthesis.v1",
+        prompt_version="synthesis.v2",
     )
     db_session.add(message)
     db_session.flush()

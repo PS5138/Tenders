@@ -120,7 +120,7 @@ def test_full_run_writes_the_report(
     assert twin["models"] == {"main": settings.model_main, "fast": settings.model_fast}
     assert twin["thresholds"]["coverage_floor"] == settings.coverage_floor
     assert f"**{settings.coverage_floor}**" in markdown
-    assert {"synthesis.v1", "judge.v1", "rerank.v1"} <= set(twin["prompt_versions"].values())
+    assert {"synthesis.v2", "judge.v1", "rerank.v1"} <= set(twin["prompt_versions"].values())
     assert report.configurations[0]["label"] == "topic_list=on,vector_list=max,llm_rerank=off"
     assert report.configurations[0]["patched"] == []
 

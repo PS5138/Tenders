@@ -3,7 +3,9 @@
 Creates a new ``ai`` version on the thread's question, copies the message's segments, gaps,
 fact checklist, verbatim offer, model and prompt version, derives ``text`` and ``word_count``
 from the segments, links the message to the version, and makes it current under the
-displacement rule (status moves to ``ai_draft`` through the transition function).
+displacement rule (status moves to ``ai_draft`` through the transition function). A message
+can be older than the invalidations that happened since it was written, so once the version is
+current its cited sources go through fact invalidation again (``revalidate_copied_sources``).
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from app.db.enums import AuthorType, EventType, MessageRole, ResponseType, Suppo
 from app.db.models import Answer, Message, Question, Thread
 from app.generate.segmentation import join_segments
 from app.review.events import EntityType, record_event
+from app.review.invalidation import revalidate_copied_sources
 from app.review.versions import check_displacement, next_version, set_current_ai_version
 
 
@@ -84,6 +87,9 @@ def save_message_as_answer(
     )
     set_current_ai_version(session, question, answer, actor, confirm_displace)
     message.answer_id = answer.id
+    # A fact superseded or expired, or an item removed, after the message was written would
+    # otherwise reach the current answer still marked supported.
+    revalidate_copied_sources(session, answer)
     record_event(
         session,
         EntityType.QUESTION,

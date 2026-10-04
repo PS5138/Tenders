@@ -2,15 +2,32 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "full stack",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
       "name": "backend",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["/Users/parivrudh.sharma/Desktop/TENDERAUTOMATION/Tenders/backend/scripts/dev_up.sh"],
+      "runtimeArgs": [
+        "backend/scripts/dev_up.sh"
+      ],
       "port": 8000
     },
     {
       "name": "frontend",
-      "runtimeExecutable": "/Users/parivrudh.sharma/.local/node/current/bin/pnpm",
-      "runtimeArgs": ["--dir", "/Users/parivrudh.sharma/Desktop/TENDERAUTOMATION/Tenders/frontend", "dev"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "pnpm@10.33.0",
+        "--dir",
+        "frontend",
+        "dev"
+      ],
       "port": 3000
     }
   ]

@@ -6,10 +6,10 @@ Both return ``{answer, question}``: the full updated answer and the question det
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
 from app.api.deps import Actor, DbSession, OrgId
@@ -25,7 +25,9 @@ class AttestBody(BaseModel):
 
 
 class DisputeBody(BaseModel):
-    note: str = Field(min_length=1)
+    # Stripped before the length check, so a note of only spaces is a 422, not a 500 from
+    # ``dispute``'s own guard.
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 def _load_answer(session: Session, answer_id: uuid.UUID, org_id: uuid.UUID) -> Answer:

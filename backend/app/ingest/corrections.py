@@ -10,10 +10,11 @@
   so the fact gate and the currency ranking see the corrected date.
 - ``confirm_document`` sets ``classification_confirmed`` and re-evaluates steps 7 and 8.
 - ``rerun_from_stage`` deletes this document's outputs of a stage and the later ones so a
-  stage re-run is idempotent: knowledge items and their facts, unpaired fragments, the fact
-  supersessions those facts set and the ``supersession_decisions`` rows the document is party
-  to. Clusters that lost a member re-elect their canonical, deleted items and facts go
-  through fact invalidation with reason ``removed``, and sections are never deleted.
+  stage re-run is idempotent: knowledge items and their facts, unpaired fragments and the
+  fact supersessions those facts set. Clusters that lost a member re-elect their canonical,
+  deleted items and facts go through fact invalidation with reason ``removed``, and sections
+  are never deleted. ``supersession_decisions`` rows are kept and reconciled in place by the
+  linking stage, so a retry never discards a human decision.
 
 Nothing here commits; the endpoint or the job handler does.
 """
@@ -34,12 +35,7 @@ from app.db.enums import DocType, EffectiveDateSource, IngestStatus, Invalidatio
 from app.db.models import Document, Fact, Job, KnowledgeItem, UnpairedFragment
 from app.ingest.dedup import reelect_members
 from app.ingest.facts import call_invalidate, evaluate_fact_supersession
-from app.ingest.supersession import (
-    evaluate_document_supersession,
-    is_supersedable,
-    remove_decision_row,
-    rows_for_document,
-)
+from app.ingest.supersession import evaluate_document_supersession, is_supersedable
 from app.jobs import enqueue
 
 logger = logging.getLogger(__name__)
@@ -231,9 +227,17 @@ def rerun_from_stage(session: Session, document: Document, stage: str) -> None:
     session.flush()
     stage_index = STAGES.index(stage)
 
-    # Decision rows are an output of linking, the last stage: always removed, with reversal.
-    for row in rows_for_document(session, document.id):
-        remove_decision_row(session, row, reverse=True)
+    # Decision rows are never deleted here. The linking stage reconciles them in place
+    # (``evaluate_document_supersession``): a row whose pair is no longer valid is removed with
+    # its exclusion reversed, an automatic or pending row is re-evaluated, and a human
+    # ``keep_both`` or ``superseded`` stands, as step 8 requires. Deleting them would let a
+    # worker retry silently discard a person's decision and rewrite the events it caused.
+
+    if stage_index > STAGES.index(IngestStatus.EXTRACTING.value):
+        # Embedding or linking re-run: items and facts stay; step 5 overwrites embeddings, step
+        # 6 re-places every item, and steps 7 and 8 recompute fact pointers and decision rows
+        # in place, so there is nothing to delete.
+        return
 
     facts = session.scalars(select(Fact).where(Fact.document_id == document.id)).all()
     fact_ids = [fact.id for fact in facts]
@@ -245,14 +249,6 @@ def rerun_from_stage(session: Session, document: Document, stage: str) -> None:
             .values(superseded_by=None)
             .execution_options(synchronize_session="fetch")
         )
-
-    if stage_index > STAGES.index(IngestStatus.EXTRACTING.value):
-        # Embedding or linking re-run: items and facts stay; step 5 overwrites embeddings, step
-        # 6 re-places every item and step 7 recomputes the pointers just cleared.
-        for fact in facts:
-            fact.superseded_by = None
-        session.flush()
-        return
 
     items = session.scalars(
         select(KnowledgeItem).where(KnowledgeItem.document_id == document.id)

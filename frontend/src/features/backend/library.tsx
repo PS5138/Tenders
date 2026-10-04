@@ -5,7 +5,7 @@ import { backendJson, backendUrl } from '@/lib/backend-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/ui/page-header';
-import { ErrorNote, Field, Upload, field, label, panel, useResource, type S } from './shared';
+import { ClassificationForm, ClassificationPrompt, ErrorNote, Field, Upload, field, label, needsConfirmation, panel, useResource, type S } from './shared';
 import { SourcePane, type Source } from './trace';
 
 export function Library({ workspaceId }: { workspaceId: string }) {
@@ -67,8 +67,10 @@ export function Library({ workspaceId }: { workspaceId: string }) {
                 </p>
               ) : null}
               {d.superseded_by ? <p className="mt-2 text-xs text-amber">A newer document of the same kind replaces this one when drafting.</p> : null}
-              {d.doc_type && !d.classification_confirmed ? (
-                <p className="mt-2 text-sm text-amber">Classification needs your confirmation. Open the document to confirm or correct it.</p>
+              {needsConfirmation(d) ? (
+                <div className="mt-2">
+                  <ClassificationPrompt workspaceId={workspaceId} document={d} onChange={refresh} showOpenLink />
+                </div>
               ) : null}
               <ErrorNote error={d.ingest_error} />
             </article>
@@ -149,58 +151,17 @@ export function LibraryDocument({ workspaceId, documentId }: { workspaceId: stri
           <a className="text-sm text-accent underline" href={backendUrl(workspaceId, `/documents/${documentId}/file`)}>
             Download original
           </a>
-          {!d.classification_confirmed && d.doc_type ? (
-            <Button busy={busy} variant="primary" onClick={() => void change(`/documents/${documentId}/confirm`, 'POST', {})}>
-              Confirm classification
-            </Button>
-          ) : null}
         </div>
       ) : null}
-      {d && d.doc_type !== 'tender_document' ? (
-        <form
-          className={`${panel} mb-5 grid gap-3 sm:grid-cols-3`}
-          key={`${d.id}-${d.doc_type}-${d.effective_date}`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            void change(`/documents/${documentId}`, 'PATCH', {
-              doc_type: f.get('doc_type'),
-              doc_kind: f.get('doc_kind') || null,
-              effective_date: f.get('effective_date') || null,
-            });
-          }}
-        >
-          <Field title="Document type">
-            <select className={field} name="doc_type" defaultValue={d.doc_type ?? 'reference'}>
-              <option value="past_submission">Past submission</option>
-              <option value="reference">Reference</option>
-            </select>
-          </Field>
-          <Field title="Reference kind">
-            <select className={field} name="doc_kind" defaultValue={d.doc_kind ?? ''}>
-              {[
-                '',
-                'dspt_confirmation',
-                'cyber_essentials_plus',
-                'iso_27001',
-                'clinical_safety_case',
-                'information_security_policy',
-                'product_description',
-                'other',
-              ].map((v) => (
-                <option key={v} value={v}>
-                  {v ? label(v) : 'None'}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field title="Effective date">
-            <input className={field} name="effective_date" type="date" defaultValue={d.effective_date ?? ''} />
-          </Field>
-          <Button type="submit" busy={busy}>
-            Save classification
-          </Button>
-        </form>
+      {d && needsConfirmation(d) ? (
+        <div className="mb-5">
+          <ClassificationPrompt workspaceId={workspaceId} document={d} onChange={refresh} />
+        </div>
+      ) : d && d.doc_type !== 'tender_document' ? (
+        <section className={`${panel} mb-5 space-y-3`}>
+          <h2 className="text-sm font-semibold">Classification</h2>
+          <ClassificationForm key={`${d.id}-${d.doc_type}-${d.doc_kind}-${d.effective_date}`} workspaceId={workspaceId} document={d} onSaved={refresh} />
+        </section>
       ) : null}
       <div className={`grid gap-4 ${source ? 'xl:grid-cols-2' : ''}`}>
         <div>

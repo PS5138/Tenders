@@ -12,7 +12,20 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/states';
 import { StatusBadge } from './badges';
-import { QuestionBoard, QuestionList, groupQuestions, type GroupBy, type Reviewer } from './question-views';
+import { QuestionBoard, QuestionTable, groupQuestions, type GroupBy, type Reviewer } from './question-views';
+import {
+  COMPLIANCE_ORDER,
+  DEFAULT_DIRECTION,
+  SORT_LABELS,
+  filterQuestions,
+  hasFilters,
+  nextSort,
+  sectionsOf,
+  sortQuestions,
+  type QuestionSort,
+  type SortKey,
+} from '@/lib/question-table';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 
 const menuItem =
   'flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-soft [&_svg]:size-4';
@@ -370,7 +383,7 @@ export function NewTender({ workspaceId }: { workspaceId: string }) {
 
 const VIEWS = [
   ['board', 'Board'],
-  ['list', 'List'],
+  ['table', 'Table'],
   ['document', 'Document'],
   ['documents', 'Buyer documents'],
   ['submission', 'Submission'],
@@ -401,8 +414,11 @@ export function TenderWorkspace({
     [status, setStatus] = useState(''),
     [coverage, setCoverage] = useState(''),
     [search, setSearch] = useState(''),
-    [sort, setSort] = useState('order'),
+    [section, setSection] = useState(''),
+    [compliance, setCompliance] = useState(''),
+    [sort, setSort] = useState<QuestionSort>({ key: 'order', direction: 'asc' }),
     [owner, setOwner] = useState(''),
+    [confirmSubmit, setConfirmSubmit] = useState(false),
     [groupBy, setGroupBy] = useState<GroupBy>('status'),
     [notice, setNotice] = useState<string | null>(null),
     [editing, setEditing] = useState(false),
@@ -438,29 +454,13 @@ export function TenderWorkspace({
       active = false;
     };
   }, [workspaceId, tenderId]);
+  const filters = { search, section, status, coverage, compliance, assignee: owner };
+  const filtered = hasFilters(filters);
   const rows = useMemo(
-    () =>
-      (questions.data ?? [])
-        .filter(
-          (q) =>
-            (!status || (status === 'unapproved' ? q.status !== 'approved' : q.status === status)) &&
-            (!coverage || q.coverage === coverage) &&
-            (!owner || (owner === '-' ? !q.assignee : q.assignee === owner)) &&
-            `${q.section} ${q.number} ${q.text} ${q.assignee ?? ''} ${q.compliance_class ?? ''}`
-              .toLowerCase()
-              .includes(search.toLowerCase()),
-        )
-        .sort((a, b) =>
-          sort === 'weighting'
-            ? (b.weighting ?? 0) - (a.weighting ?? 0)
-            : sort === 'support'
-              ? (a.current_answer?.support_summary.score ?? 0) - (b.current_answer?.support_summary.score ?? 0)
-              : sort === 'assignee'
-                ? (a.assignee ?? '').localeCompare(b.assignee ?? '')
-                : a.order_index - b.order_index,
-        ),
-    [questions.data, status, coverage, search, sort, owner],
+    () => sortQuestions(filterQuestions(questions.data ?? [], { search, section, status, coverage, compliance, assignee: owner }), sort),
+    [questions.data, search, section, status, coverage, compliance, owner, sort],
   );
+  const sections = useMemo(() => sectionsOf(questions.data ?? []), [questions.data]);
   // The fetch is keyed on the visible ids and their current answer ids, so a filter keystroke
   // or a two-second job poll that changes neither refetches nothing and aborts nothing.
   const detailKey = view === 'document' ? rows.map((q) => `${q.id}:${q.current_answer?.id ?? ''}`).join(',') : '';
@@ -605,9 +605,7 @@ export function TenderWorkspace({
                     {canSubmit ? (
                       <Dropdown.Item
                         className={menuItem}
-                        onSelect={() => {
-                          if (window.confirm('Mark this tender submitted and promote its approved answers into the library?')) void act('submit');
-                        }}
+                        onSelect={() => setConfirmSubmit(true)}
                       >
                         <Send aria-hidden /> Mark as submitted
                       </Dropdown.Item>
@@ -711,7 +709,7 @@ export function TenderWorkspace({
               </Button>
             </div>
           </div>
-          {['board', 'list', 'document'].includes(view) ? (
+          {['board', 'table', 'document'].includes(view) ? (
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <input
                 className={`${compact} w-56`}
@@ -720,6 +718,24 @@ export function TenderWorkspace({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
+              <Button
+                size="sm"
+                variant={status === 'unapproved' ? 'primary' : 'secondary'}
+                aria-pressed={status === 'unapproved'}
+                onClick={() => setStatus(status === 'unapproved' ? '' : 'unapproved')}
+              >
+                Not yet approved
+              </Button>
+              {sections.length > 1 ? (
+                <select className={compact} aria-label="Section filter" value={section} onChange={(e) => setSection(e.target.value)}>
+                  <option value="">Any section</option>
+                  {sections.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <select className={compact} aria-label="Status filter" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="">Any status</option>
                 <option value="unapproved">Not approved</option>
@@ -737,6 +753,15 @@ export function TenderWorkspace({
                   </option>
                 ))}
               </select>
+              <select className={compact} aria-label="Compliance class filter" value={compliance} onChange={(e) => setCompliance(e.target.value)}>
+                <option value="">Any compliance class</option>
+                <option value="-">Not yet classified</option>
+                {COMPLIANCE_ORDER.map((c) => (
+                  <option key={c} value={c}>
+                    Class {c}
+                  </option>
+                ))}
+              </select>
               <select className={compact} aria-label="Owner filter" value={owner} onChange={(e) => setOwner(e.target.value)}>
                 <option value="">Any owner</option>
                 <option value="-">No owner</option>
@@ -747,7 +772,7 @@ export function TenderWorkspace({
                 ))}
               </select>
               <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-              {view !== 'document' ? (
+              {view === 'board' ? (
                 <select className={compact} aria-label="Group by" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
                   <option value="status">Group by status</option>
                   <option value="owner">Group by owner</option>
@@ -755,20 +780,40 @@ export function TenderWorkspace({
                   <option value="section">Group by section</option>
                 </select>
               ) : null}
-              <select className={compact} aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="order">Buyer’s order</option>
-                <option value="weighting">Highest weighting</option>
-                <option value="support">Lowest evidence coverage</option>
-                <option value="assignee">Owner</option>
+              <select
+                className={compact}
+                aria-label="Sort by"
+                value={sort.key}
+                onChange={(e) => {
+                  const key = e.target.value as SortKey;
+                  setSort({ key, direction: DEFAULT_DIRECTION[key] });
+                }}
+              >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    Sort by {SORT_LABELS[key].toLowerCase()}
+                  </option>
+                ))}
               </select>
-              {search || status || coverage || owner ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={sort.direction === 'asc' ? 'Ascending; switch to descending' : 'Descending; switch to ascending'}
+                title={sort.direction === 'asc' ? 'Ascending' : 'Descending'}
+                onClick={() => setSort(nextSort(sort, sort.key))}
+              >
+                {sort.direction === 'asc' ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden />}
+              </Button>
+              {filtered ? (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => {
                     setSearch('');
+                    setSection('');
                     setStatus('');
                     setCoverage('');
+                    setCompliance('');
                     setOwner('');
                   }}
                 >
@@ -807,8 +852,12 @@ export function TenderWorkspace({
           />
         </>
       ) : null}
-      {hasPack && !noQuestions && view === 'list' ? (
-        <QuestionList workspaceId={workspaceId} groups={groups} reviewersOf={reviewersOf} showStatus={groupBy !== 'status'} />
+      {hasPack && !noQuestions && view === 'table' ? (
+        rows.length ? (
+          <QuestionTable workspaceId={workspaceId} rows={rows} sort={sort} onSort={(key) => setSort(nextSort(sort, key))} reviewersOf={reviewersOf} />
+        ) : (
+          <p className="text-sm text-muted">No questions match these filters.</p>
+        )
       ) : null}
       {hasPack && !noQuestions && view === 'document' ? (
         <div className={`grid gap-4 ${source ? 'xl:grid-cols-2' : ''}`}>
@@ -894,9 +943,7 @@ export function TenderWorkspace({
               className="mt-3"
               busy={busy}
               disabled={!canSubmit}
-              onClick={() => {
-                if (window.confirm('Mark this tender submitted and promote its approved answers into the library?')) void act('submit');
-              }}
+              onClick={() => setConfirmSubmit(true)}
             >
               Mark submitted
             </Button>
@@ -1039,6 +1086,28 @@ export function TenderWorkspace({
         >
           Download export
         </Button>
+      </Dialog>
+      <Dialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Mark this tender submitted?"
+        description={`${t?.questions_approved ?? 0} of ${t?.questions_total ?? 0} questions are approved. Approved answers are added to your evidence library. A tender can be marked submitted only once.`}
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirmSubmit(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            busy={busy}
+            onClick={() => {
+              setConfirmSubmit(false);
+              void act('submit');
+            }}
+          >
+            Mark submitted
+          </Button>
+        </div>
       </Dialog>
     </>
   );

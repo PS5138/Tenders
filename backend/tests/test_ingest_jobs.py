@@ -49,17 +49,42 @@ def stage_log(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return seen
 
 
+# Steps 5 to 9 as the handler imports them, with the module each comes from.
+DOWNSTREAM_STEPS: dict[str, str] = {
+    "persist_facts": "app.ingest.facts",
+    "embed_items": "app.ingest.embed",
+    "deduplicate": "app.ingest.dedup",
+    "evaluate_fact_supersession": "app.ingest.facts",
+    "evaluate_document_supersession": "app.ingest.supersession",
+    "rerun_from_stage": "app.ingest.corrections",
+}
+
+
 @pytest.fixture
 def owner_b_absent(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
-    """Make every owner-B step look not-yet-landed and record what the handler asked for."""
+    """Stub steps 5 to 9 so a test exercises the stage orchestration alone, and record the
+    calls the handler made, in order."""
     requested: list[tuple[str, str]] = []
 
-    def missing(module: str, name: str):  # noqa: ANN202
-        requested.append((module, name))
-        return None
+    def stub(module: str, name: str):  # noqa: ANN202
+        def call(*_args: object, **_kwargs: object) -> None:
+            requested.append((module, name))
 
-    monkeypatch.setattr(ingest_jobs, "_optional", missing)
+        return call
+
+    for name, module in DOWNSTREAM_STEPS.items():
+        monkeypatch.setattr(ingest_jobs, name, stub(module, name))
     return requested
+
+
+def test_every_downstream_step_is_a_hard_import() -> None:
+    """A missing or renamed step must fail loudly, never let a document reach ``ready``
+    without embeddings, deduplication or supersession."""
+    import importlib
+
+    assert not hasattr(ingest_jobs, "_optional")
+    for name, module in DOWNSTREAM_STEPS.items():
+        assert getattr(ingest_jobs, name) is getattr(importlib.import_module(module), name)
 
 
 def _script_submission(fake_llm, db_session: Session) -> None:
@@ -130,7 +155,7 @@ def test_library_document_runs_every_stage_to_ready(
     ).all()
     assert len(items) == 1 and items[0].text_verified
 
-    # Steps 5 to 9 were requested from owner B's modules in pipeline order and skipped cleanly.
+    # Steps 5 to 9 were called in pipeline order.
     assert owner_b_absent == [
         ("app.ingest.facts", "persist_facts"),
         ("app.ingest.embed", "embed_items"),

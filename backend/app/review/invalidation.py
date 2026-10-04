@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select, text
@@ -24,7 +24,7 @@ from app.db.enums import (
     SourceType,
     SupportStatus,
 )
-from app.db.models import Answer, Fact, Question, utcnow
+from app.db.models import Answer, Document, Fact, KnowledgeItem, Question, utcnow
 from app.review.events import SYSTEM_ACTOR, EntityType, record_event
 from app.review.support import recompute_support
 
@@ -147,6 +147,75 @@ def invalidate(
         affected += 1
     session.flush()
     return affected
+
+
+def stale_fact_reason(
+    session: Session, fact_id: uuid.UUID, *, today: date | None = None
+) -> str | None:
+    """Why a fact is no longer current, or None while it is: ``removed`` when the row is gone,
+    ``superseded`` when it or its source document is superseded, ``expired`` when it has
+    expired (swept or not). Mirrors the plan's definition of a current fact."""
+    fact = session.get(Fact, fact_id)
+    if fact is None:
+        return InvalidationReason.REMOVED.value
+    if fact.superseded_by is not None:
+        return InvalidationReason.SUPERSEDED.value
+    document = session.get(Document, fact.document_id)
+    if document is not None and document.superseded_by is not None:
+        return InvalidationReason.SUPERSEDED.value
+    day = today or datetime.now(UTC).date()
+    if fact.expired_at is not None or (fact.expires_on is not None and fact.expires_on < day):
+        return InvalidationReason.EXPIRED.value
+    return None
+
+
+def revalidate_copied_sources(session: Session, answer: Answer) -> int:
+    """Bring a version whose segments were copied from an earlier record (a thread message
+    saved as an answer) up to date with every invalidation that happened since.
+
+    Run once the version is current. Facts that are no longer current and knowledge items that
+    were removed go through ``invalidate``, exactly as they would have had this version been
+    current when they changed; fact_checklist entries for facts no segment cites are updated
+    in place. Returns the number of sources invalidated.
+    """
+    fact_ids: set[str] = set()
+    item_ids: set[str] = set()
+    for segment in answer.segments or []:
+        for source in segment.get("sources") or []:
+            source_id = source.get("source_id")
+            if not source_id:
+                continue
+            if source.get("source_type") == SourceType.FACT.value:
+                fact_ids.add(str(source_id))
+            elif source.get("source_type") == SourceType.KNOWLEDGE_ITEM.value:
+                item_ids.add(str(source_id))
+
+    checklist: list[dict[str, Any]] = []
+    checklist_changed = False
+    for stored_entry in answer.fact_checklist or []:
+        entry = dict(stored_entry)
+        fact_id = entry.get("fact_id")
+        if fact_id and str(fact_id) not in fact_ids:
+            why = stale_fact_reason(session, uuid.UUID(str(fact_id)))
+            if why is not None and entry.get("status") != _CHECKLIST_STATUS[why]:
+                entry["status"] = _CHECKLIST_STATUS[why]
+                checklist_changed = True
+        checklist.append(entry)
+    if checklist_changed:
+        answer.fact_checklist = checklist
+        session.flush()
+
+    invalidated = 0
+    for fact_id in sorted(fact_ids):
+        why = stale_fact_reason(session, uuid.UUID(fact_id))
+        if why is not None:
+            invalidate(session, SourceType.FACT, uuid.UUID(fact_id), why)
+            invalidated += 1
+    for item_id in sorted(item_ids):
+        if session.get(KnowledgeItem, uuid.UUID(item_id)) is None:
+            invalidate(session, SourceType.KNOWLEDGE_ITEM, uuid.UUID(item_id), "removed")
+            invalidated += 1
+    return invalidated
 
 
 def run_expiry_sweep(session: Session, *, today: datetime | None = None) -> int:

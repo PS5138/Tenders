@@ -17,7 +17,7 @@ PROMPT_VERSIONS: dict[str, str] = {
     "extract_questions": "v1",
     "coverage_judgement": "v1",
     "query_rewrite": "v1",
-    "synthesis": "v1",
+    "synthesis": "v2",
     "entailment": "v1",
     "synthetic_answers": "v1",
 }
@@ -42,5 +42,5 @@ def load_prompt(name: str, version: str | None = None) -> str:
 
 
 def prompt_version(name: str) -> str:
-    """The string recorded on answers and messages, e.g. ``"synthesis.v1"``."""
+    """The string recorded on answers and messages, e.g. ``"synthesis.v2"``."""
     return f"{name}.{PROMPT_VERSIONS[name]}"

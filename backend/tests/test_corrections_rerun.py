@@ -18,7 +18,7 @@ from app.db.models import (
 )
 from app.ingest.corrections import PatchError, apply_patch, confirm_document, rerun_from_stage
 from app.ingest.dedup import deduplicate
-from app.ingest.supersession import evaluate_document_supersession
+from app.ingest.supersession import apply_decision, evaluate_document_supersession
 from tests.test_supersession_factories import (  # noqa: F401 - fixture import
     ORG,
     InvalidationRecorder,
@@ -69,11 +69,13 @@ def test_rerun_from_extracting_removes_outputs_but_never_sections(
     # The fact supersession this document's fact set is cleared, restoring nothing.
     db_session.refresh(older_fact)
     assert older_fact.superseded_by is None
-    # Decision rows the document is party to are gone and the partner's exclusion reversed.
-    assert db_session.scalars(select(SupersessionDecision)).all() == []
+    # Decision rows are kept for the linking stage to reconcile, so the partner stays
+    # superseded and its items stay excluded across the re-run.
+    rows = db_session.scalars(select(SupersessionDecision)).all()
+    assert len(rows) == 1 and rows[0].decision == "superseded"
     db_session.refresh(older)
     db_session.refresh(older_item)
-    assert older.superseded_by is None and older_item.excluded_from_retrieval is False
+    assert older.superseded_by == newer.id and older_item.excluded_from_retrieval is True
     # The cluster that lost its canonical re-elected the survivor.
     db_session.refresh(other_item)
     assert other_item.is_canonical and other_item.canonical_id is None
@@ -94,11 +96,58 @@ def test_rerun_from_linking_keeps_items_and_facts(db_session: Session) -> None:
 
     assert db_session.get(KnowledgeItem, item.id) is not None
     assert db_session.get(Fact, fact.id) is not None
-    assert db_session.scalars(select(SupersessionDecision)).all() == []
-    assert older.superseded_by is None
+    rows = db_session.scalars(select(SupersessionDecision)).all()
+    assert len(rows) == 1 and rows[0].decision == "superseded"
+    assert older.superseded_by == newer.id
 
     with pytest.raises(ValueError):
         rerun_from_stage(db_session, newer, "ready")
+
+
+@pytest.mark.parametrize("stage", ["extracting", "embedding", "linking"])
+def test_rerun_keeps_a_human_keep_both(db_session: Session, stage: str) -> None:
+    older = make_document(db_session, effective_date=date(2024, 1, 1))
+    newer = make_document(db_session, effective_date=date(2025, 1, 1))
+    older_item = make_item(db_session, older)
+    evaluate_document_supersession(db_session, newer)
+    row = db_session.scalars(select(SupersessionDecision)).one()
+    apply_decision(db_session, row, "keep_both", None, "bid lead")
+    assert older.superseded_by is None
+    events_before = len(events_for(db_session, older.id))
+
+    rerun_from_stage(db_session, newer, stage)
+    # The linking stage of the resumed job.
+    evaluate_document_supersession(db_session, newer)
+
+    db_session.refresh(row)
+    db_session.refresh(older)
+    db_session.refresh(older_item)
+    assert row.decision == "keep_both" and row.decided_by == "bid lead"
+    assert older.superseded_by is None and older_item.excluded_from_retrieval is False
+    assert len(events_for(db_session, older.id)) == events_before, "a retry writes no events"
+
+
+def test_extracting_rerun_of_a_human_superseded_document_excludes_its_new_items(
+    db_session: Session,
+) -> None:
+    older = make_document(db_session, effective_date=date(2024, 1, 1))
+    newer = make_document(db_session, effective_date=date(2025, 1, 1))
+    evaluate_document_supersession(db_session, newer)
+    row = db_session.scalars(select(SupersessionDecision)).one()
+    # A person overrides the automatic outcome: the 2025 document is the superseded one.
+    apply_decision(db_session, row, "superseded", older.id, "ig lead")
+    assert newer.superseded_by == older.id
+
+    rerun_from_stage(db_session, newer, "extracting")
+    recreated = make_item(db_session, newer)
+    assert recreated.excluded_from_retrieval is False
+    evaluate_document_supersession(db_session, newer)
+
+    db_session.refresh(row)
+    db_session.refresh(recreated)
+    assert row.decided_by == "ig lead" and row.superseding_document_id == older.id
+    assert newer.superseded_by == older.id
+    assert recreated.excluded_from_retrieval is True
 
 
 def test_patch_doc_type_change_enqueues_a_re_ingest_from_extracting(

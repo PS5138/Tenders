@@ -6,6 +6,7 @@ import { env } from '../env';
 import { backendConfig } from './config';
 import { backendIdentity } from './context';
 import { allowedBackendRequest, browserIdentityHeader, mutationOriginProblem } from './policy';
+import { appliedPartOfRefusedPatch } from './refused-patch';
 import { backendFetch, passthroughResponse } from './transport';
 
 const uploadRoute = /^\/(documents|tenders\/[0-9a-f-]{36}\/documents)$/i;
@@ -111,9 +112,19 @@ export async function proxyBackend(request: Request, workspaceId: string, segmen
       body: forwardedBody,
       contentType: request.headers.get('content-type') ?? undefined,
     });
-    if (response.ok && prepared && mutationBody) {
+    // A refused status still lets the other fields of the same PATCH land (409 with the saved `question`),
+    // so an assignment made alongside it is notified like any other.
+    const notifyBody =
+      prepared && mutationBody
+        ? response.ok
+          ? mutationBody
+          : response.status === 409 && request.method === 'PATCH'
+            ? appliedPartOfRefusedPatch(mutationBody, await response.clone().json().catch(() => null))
+            : null
+        : null;
+    if (prepared && notifyBody) {
       try {
-        await notifyQuestionMutation(user.id, workspaceId, identity, prepared, mutationBody, Boolean(questionMutation?.[2]));
+        await notifyQuestionMutation(user.id, workspaceId, identity, prepared, notifyBody, Boolean(questionMutation?.[2]));
       } catch (error) {
         console.error('[notifications] Backend change saved, notification creation failed', error);
       }

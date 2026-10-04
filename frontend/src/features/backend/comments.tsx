@@ -83,7 +83,8 @@ function ThreadCard({
 }) {
   const [reply, setReply] = useState(''),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState<string | null>(null);
+    [error, setError] = useState<string | null>(null),
+    [removing, setRemoving] = useState<string | null>(null);
   const outdated = !thread.current;
   async function send(body: Record<string, unknown>) {
     setBusy(true);
@@ -116,18 +117,45 @@ function ThreadCard({
           </p>
           <MentionText text={m.body} members={members} />
           {m.authorId === me ? (
-            <button
-              type="button"
-              className="text-[11px] text-muted underline hover:text-red"
-              disabled={busy}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm('Remove this comment from the thread? It stays in the question’s activity record.'))
-                  void send({ action: 'delete_message', messageId: m.id });
-              }}
-            >
-              Remove
-            </button>
+            removing === m.id ? (
+              <span className="flex flex-wrap items-center gap-2 text-[11px]" role="group" aria-label="Confirm removal">
+                <span className="text-muted">Remove this comment from the thread? It stays in the question’s activity record.</span>
+                <button
+                  type="button"
+                  className="text-red underline"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRemoving(null);
+                    void send({ action: 'delete_message', messageId: m.id });
+                  }}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  className="text-muted underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRemoving(null);
+                  }}
+                >
+                  Keep
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="text-[11px] text-muted underline hover:text-red"
+                disabled={busy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRemoving(m.id);
+                }}
+              >
+                Remove
+              </button>
+            )
           ) : null}
         </div>
       ))}

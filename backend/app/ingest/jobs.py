@@ -7,16 +7,15 @@ document runs: 5 for a library document, 1 for a parse-only tender document.
 
 Resume: a requeued job starts at the first step of the stage recorded in ``ingest_status``.
 Before running a stage other than parsing or classifying from a resume, the handler calls
-``app.ingest.corrections.rerun_from_stage`` (owner B) so the stage's earlier outputs are
-deleted first; sections are never deleted and ``persist_sections`` is idempotent on its own.
+``app.ingest.corrections.rerun_from_stage`` so the stage's earlier outputs are deleted first;
+sections are never deleted and ``persist_sections`` is idempotent on its own.
 
-Steps 5 to 9 belong to owner B and are imported lazily; while a module is missing the handler
-logs one clear line and moves on, so the pipeline runs end to end as soon as it lands.
+Every step is a plain import: a missing or renamed step fails at import time rather than
+letting a document reach ``ready`` without embeddings, deduplication or supersession.
 """
 
 from __future__ import annotations
 
-import importlib
 import logging
 import uuid
 from collections.abc import Callable
@@ -29,9 +28,14 @@ from app.db import enums as e
 from app.db.models import Document, DocumentSection, Job, KnowledgeItem
 from app.ingest.chunk import chunk_reference
 from app.ingest.classify import classify_document
+from app.ingest.corrections import rerun_from_stage
+from app.ingest.dedup import deduplicate
+from app.ingest.embed import embed_items
 from app.ingest.extract import extract_pairs
+from app.ingest.facts import evaluate_fact_supersession, persist_facts
 from app.ingest.parse import parse_document, persist_sections
 from app.ingest.storage import storage_file
+from app.ingest.supersession import evaluate_document_supersession
 from app.jobs import enqueue, register, set_progress
 
 logger = logging.getLogger(__name__)
@@ -45,7 +49,7 @@ LIBRARY_STAGES: tuple[str, ...] = (
 )
 TENDER_STAGES: tuple[str, ...] = (e.IngestStatus.PARSING.value,)
 
-# Stages whose outputs owner B's rerun_from_stage must delete before a re-run.
+# Stages whose outputs rerun_from_stage must delete before a re-run.
 _RERUN_STAGES = frozenset(
     {
         e.IngestStatus.EXTRACTING.value,
@@ -57,35 +61,6 @@ _RERUN_STAGES = frozenset(
 
 class IngestError(RuntimeError):
     pass
-
-
-# --- Optional owner-B functions -------------------------------------------------------------------
-
-
-def _optional(module: str, name: str) -> Callable[..., Any] | None:
-    """Import ``module.name`` if it exists. Missing module or attribute: log once and return
-    None; an ImportError raised *inside* an existing module is not swallowed."""
-    try:
-        imported = importlib.import_module(module)
-    except ImportError as exc:
-        if exc.name not in (module, None) and not module.startswith(exc.name or "\0"):
-            raise
-        logger.warning(
-            "ingest step skipped: %s.%s is not available yet (%s)", module, name, exc
-        )
-        return None
-    function = getattr(imported, name, None)
-    if function is None:
-        logger.warning("ingest step skipped: %s has no %s yet", module, name)
-        return None
-    return function
-
-
-def _call_optional(module: str, name: str, *args: Any, **kwargs: Any) -> Any:
-    function = _optional(module, name)
-    if function is None:
-        return None
-    return function(*args, **kwargs)
 
 
 # --- Helpers ------------------------------------------------------------------------------------
@@ -168,21 +143,19 @@ def _run_extracting(session: Session, document: Document) -> None:
         )
     # Facts are persisted here rather than in linking so a job resumed at a later stage does
     # not lose them: RawFacts exist only in memory. Step 7's supersession rule runs in linking.
-    _call_optional("app.ingest.facts", "persist_facts", session, document, raw_facts)
+    persist_facts(session, document, raw_facts)
 
 
 def _run_embedding(session: Session, document: Document) -> None:
-    _call_optional("app.ingest.embed", "embed_items", session, _items(session, document))
+    embed_items(session, _items(session, document))
 
 
 def _run_linking(session: Session, document: Document) -> None:
     items = _items(session, document)
     if items:
-        _call_optional("app.ingest.dedup", "deduplicate", session, document.org_id, items)
-    _call_optional("app.ingest.facts", "evaluate_fact_supersession", session, document)
-    _call_optional(
-        "app.ingest.supersession", "evaluate_document_supersession", session, document
-    )
+        deduplicate(session, document.org_id, items)
+    evaluate_fact_supersession(session, document)
+    evaluate_document_supersession(session, document)
 
 
 _STAGE_RUNNERS: dict[str, Callable[[Session, Document], Any]] = {
@@ -230,9 +203,7 @@ def run_ingest(session: Session, document: Document, job: Job | None = None) -> 
         logger.info(
             "%s: resuming at %s; cleaning from %s", document.filename, stages[start], clean_from
         )
-        _call_optional(
-            "app.ingest.corrections", "rerun_from_stage", session, document, clean_from
-        )
+        rerun_from_stage(session, document, clean_from)
         session.flush()
 
     for index in range(start, len(stages)):

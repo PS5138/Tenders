@@ -8,6 +8,8 @@ The supported combined local entry point is `docker compose up --build -d` from 
 
 ### Native development (Linux x86_64 and macOS on Apple silicon)
 
+The quickest way is `npm run dev` from the repository root, which runs every step below in order and stops everything on one Ctrl-C (see the [root README](../README.md#quick-start)). The steps are listed here for running or restarting the parts separately.
+
 Nothing here needs Docker, Homebrew or admin rights. Prerequisites:
 
 - Node 22 with pnpm. Any Node 22 works; the team's Macs keep one under `~/.local`, so run `export PATH="$HOME/.local/node/current/bin:$PATH"` first.

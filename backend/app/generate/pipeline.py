@@ -21,6 +21,7 @@ import logging
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
@@ -57,7 +58,7 @@ from app.generate.verbatim import build_verbatim_segments, verbatim_offer
 from app.generate.verification import source_record, verify_fact_checklist, verify_segments
 from app.llm import get_llm, load_prompt, prompt_version
 from app.llm.client import History
-from app.llm.embeddings import cosine_similarity, embed
+from app.llm.embeddings import cosine_similarity
 from app.review.events import record_event
 from app.review.support import summarise_support
 
@@ -124,15 +125,9 @@ class QueryRewrite(BaseModel):
 def query_vector_for(
     session: Session, *, question: Question | None = None, text: str | None = None
 ) -> list[float]:
-    """Owner C's ``get_query_vector``; until it lands, the stored question embedding or a
-    call-time embedding of ``text``."""
-    try:
-        from app.retrieve.query import get_query_vector
-    except ImportError:
-        if text is None and question is not None and question.embedding is not None:
-            return [float(v) for v in question.embedding]
-        source = text if text is not None else (question.text if question is not None else "")
-        return embed([source])[0]
+    """The stored question embedding, or a call-time embedding of ``text``."""
+    from app.retrieve.query import get_query_vector
+
     return get_query_vector(session, question=question, text=text)
 
 
@@ -173,13 +168,9 @@ def set_current_ai_version(
 
 
 def recompute_support(session: Session, answer: Answer) -> None:
-    """Owner F's recompute (support_summary and needs_review). Until it lands, the shared
-    arithmetic alone."""
-    try:
-        from app.review.support import recompute_support as impl
-    except ImportError:
-        answer.support_summary = summarise_support(answer.segments)
-        return
+    """The review module's single recompute of ``support_summary`` and ``needs_review``."""
+    from app.review.support import recompute_support as impl
+
     impl(session, answer)
 
 
@@ -349,8 +340,24 @@ def _candidate_block(context: CandidateContext) -> str:
     return "\n".join(lines)
 
 
+def fact_not_current_reason(context: FactContext, today: date | None = None) -> str | None:
+    """Why a fact sent to synthesis is not current (``superseded``, ``document_superseded`` or
+    ``expired``), or None while it is. Facts attached to a retrieved item reach the prompt
+    whatever their state, so the prompt must say which ones the model may not rely on."""
+    fact = context.fact
+    if fact.superseded_by is not None:
+        return "superseded"
+    if context.document is not None and context.document.superseded_by is not None:
+        return "document_superseded"
+    day = today or datetime.now(UTC).date()
+    if fact.expired_at is not None or (fact.expires_on is not None and fact.expires_on < day):
+        return "expired"
+    return None
+
+
 def _fact_block(context: FactContext) -> str:
     fact = context.fact
+    not_current = fact_not_current_reason(context)
     parts = [
         f"[fact:{fact.id}] kind={fact.fact_kind}",
         f"key={fact.fact_key}" if fact.fact_key else None,
@@ -358,6 +365,7 @@ def _fact_block(context: FactContext) -> str:
         f"effective={fact.effective_date.isoformat()}" if fact.effective_date else None,
         f"expires={fact.expires_on.isoformat()}" if fact.expires_on else None,
         f"document={context.document.filename}" if context.document is not None else None,
+        f"status=not_current reason={not_current}" if not_current else "status=current",
     ]
     header = " ".join(part for part in parts if part)
     return f"{header}\nStatement: {fact.statement}"
