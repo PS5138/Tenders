@@ -23,7 +23,15 @@ from sqlalchemy.orm import Session
 from app.api.deps import Actor, DbSession, OrgId
 from app.api.schemas import ApiModel, DocumentRecord, SectionRecord
 from app.config import get_settings
-from app.db.enums import EntityType, EventType, FragmentRole, IngestStatus, ItemType, JobKind
+from app.db.enums import (
+    DocType,
+    EntityType,
+    EventType,
+    FragmentRole,
+    IngestStatus,
+    ItemType,
+    JobKind,
+)
 from app.db.models import Document, DocumentSection, Fact, KnowledgeItem, UnpairedFragment
 from app.ingest.corrections import (
     LIBRARY_STAGE_COUNT,
@@ -449,6 +457,12 @@ def fix_pair(
 ) -> PairResponse:
     """Fidelity fix or manual pairing by pointing at a span; writes pair_fixed."""
     document = _load_document(db, document_id, org_id)
+    if document.tender_id is not None or document.doc_type == DocType.TENDER_DOCUMENT.value:
+        # Tender documents never enter the library, so they never hold retrievable items.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Tender documents are not part of the library and cannot be paired.",
+        )
     section = db.get(DocumentSection, body.section_id)
     if section is None or section.document_id != document.id:
         raise HTTPException(
@@ -540,6 +554,9 @@ def fix_pair(
         db.flush()
         if fragment is not None:
             fragment.resolved_item_id = item.id
+    # An item of a superseded document is excluded like the document's other items, so a fix
+    # never brings retired material back into retrieval.
+    item.excluded_from_retrieval = document.superseded_by is not None
     db.flush()
 
     # Ingestion steps 5 and 6 for this one item.

@@ -201,7 +201,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     voyage_api_key: str | None = None
     model_main: str = "claude-opus-5"  # synthesis, extraction, query rewrite
-    model_fast: str = "claude-haiku-4-5"  # classification, coverage judgement, entailment, topics
+    model_fast: str = "claude-sonnet-5"  # classification, coverage judgement, entailment, topics
     embedding_model_openai: str = "text-embedding-3-small"
     embedding_model_voyage: str = "voyage-3"
     embedding_dimension: int = 1536

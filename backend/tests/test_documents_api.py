@@ -560,3 +560,45 @@ async def test_manual_pairing_creates_the_item_and_resolves_the_fragment(
 
     unpaired = await app_client.get(f"/documents/{document.id}/unpaired")
     assert unpaired.json()["fragments"] == []
+
+
+async def test_manual_pairing_on_a_superseded_document_stays_excluded(
+    app_client: httpx.AsyncClient, db_session: Session
+) -> None:
+    newer = make_document(db_session, effective_date=date(2025, 1, 1))
+    older = make_document(db_session, effective_date=date(2024, 1, 1))
+    older.superseded_by = newer.id
+    question_section = make_section(db_session, older, "Which standard do you certify against?")
+    answer_section = make_section(db_session, older, "We were certified to ISO 27001 in 2024.")
+    db_session.flush()
+
+    response = await app_client.post(
+        f"/documents/{older.id}/pairs",
+        json={"question_text": question_section.text, "section_id": str(answer_section.id),
+              "answer_start": 0, "answer_end": len(answer_section.text)},
+    )
+    assert response.status_code == 200, response.text
+    item = db_session.get(KnowledgeItem, uuid.UUID(response.json()["item"]["id"]))
+    assert item is not None and item.text_verified is True
+    assert item.excluded_from_retrieval is True, "retired material never re-enters retrieval"
+
+
+async def test_pairing_on_a_tender_document_is_refused(
+    app_client: httpx.AsyncClient, db_session: Session
+) -> None:
+    document = make_document(db_session, doc_type="tender_document")
+    section = make_section(db_session, document, "1.1 Describe your onboarding approach.")
+    db_session.flush()
+
+    response = await app_client.post(
+        f"/documents/{document.id}/pairs",
+        json={"question_text": "Onboarding?", "section_id": str(section.id),
+              "answer_start": 0, "answer_end": len(section.text)},
+    )
+    assert response.status_code == 409
+    count = db_session.scalar(
+        select(func.count()).select_from(KnowledgeItem).where(
+            KnowledgeItem.document_id == document.id
+        )
+    )
+    assert count == 0

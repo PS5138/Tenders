@@ -182,7 +182,7 @@ def make_answer(
     gaps: list[str] | None = None,
     fact_checklist: list[dict[str, Any]] | None = None,
     model: str | None = "claude-opus-5",
-    prompt_version: str | None = "synthesis.v1",
+    prompt_version: str | None = "synthesis.v2",
 ) -> Answer:
     from app.generate.segmentation import join_segments
     from app.review.support import summarise_support

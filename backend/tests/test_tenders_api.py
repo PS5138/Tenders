@@ -202,7 +202,9 @@ async def test_upload_question_pack_enqueues_extraction(
     app_client: httpx.AsyncClient, db_session: Session
 ) -> None:
     created = await create_tender(app_client)
-    files = {"file": ("pack.xlsx", xlsx_bytes(), "application/octet-stream")}
+    # Generated once: openpyxl stamps the creation time to the second, so two calls can differ.
+    pack = xlsx_bytes()
+    files = {"file": ("pack.xlsx", pack, "application/octet-stream")}
     response = await app_client.post(
         f"/tenders/{created['id']}/documents",
         data={"tender_doc_kind": "question_pack"},
@@ -221,7 +223,7 @@ async def test_upload_question_pack_enqueues_extraction(
     assert document["classification_confirmed"] is True
     assert document["ingest_status"] == "queued"
     assert document["filename"] == "pack.xlsx"
-    assert Path(document["storage_path"]).read_bytes() == xlsx_bytes()
+    assert Path(document["storage_path"]).read_bytes() == pack
 
     job = db_session.get(Job, uuid.UUID(body["job_id"]))
     assert job.kind == "extract_questions"

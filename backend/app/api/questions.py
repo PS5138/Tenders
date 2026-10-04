@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from pydantic_core import to_jsonable_python
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -224,7 +225,9 @@ class AcknowledgeBody(BaseModel):
 
 
 class CommentBody(BaseModel):
-    text: str = Field(min_length=1)
+    # Stripped before the length check, so a comment of only spaces is a 422 rather than an
+    # empty row in the audit trail.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 # --- Routes -----------------------------------------------------------------------------------
@@ -242,17 +245,10 @@ def patch_question(
     question_id: uuid.UUID, body: QuestionPatch, db: DbSession, org_id: OrgId, actor: Actor
 ) -> Any:
     """assignee, status, compliance_class, compliant_by. A status that is not allowed returns
-    409 with ``{blockers}``; the other fields are never gated."""
+    409 with ``{detail, to, blockers, question}``; the other fields are never gated, so they
+    are applied and committed either way and ``question`` is the row as it now stands."""
     question = load_question(db, question_id, org_id)
     provided = body.model_fields_set
-    if "status" in provided and body.status is not None:
-        try:
-            transition(db, question, body.status, actor)
-        except TransitionBlocked as exc:
-            return JSONResponse(
-                status_code=status.HTTP_409_CONFLICT,
-                content={"detail": str(exc), "to": exc.to, "blockers": exc.blockers},
-            )
     if "assignee" in provided and body.assignee != question.assignee:
         previous = question.assignee
         question.assignee = body.assignee
@@ -291,6 +287,20 @@ def patch_question(
                     },
                 },
                 org_id=question.org_id,
+            )
+    if "status" in provided and body.status is not None:
+        try:
+            transition(db, question, body.status, actor)
+        except TransitionBlocked as exc:
+            db.commit()
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "detail": str(exc),
+                    "to": exc.to,
+                    "blockers": exc.blockers,
+                    "question": jsonable_encoder(question_detail(db, question)),
+                },
             )
     db.commit()
     return question_detail(db, question)

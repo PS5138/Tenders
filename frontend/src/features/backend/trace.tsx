@@ -54,6 +54,40 @@ export function nextAttentionIndex(indices: readonly number[], last: number | nu
   return indices.find((i) => i > last) ?? indices[0];
 }
 
+export type LiveSupportSummary = {
+  substantive: number;
+  supported: number;
+  /** Substantive sentences that are not supported, including those still being checked. */
+  needs_attention: number;
+  /** Substantive sentences whose source is still being checked (streamed with `pending`). */
+  pending: number;
+  score: number | null;
+};
+
+/**
+ * The support summary for segments as they stand, the same arithmetic as the backend's
+ * `summarise_support`. Used while a draft streams, before `done` carries the stored summary: a
+ * `pending` sentence counts as substantive and not yet supported, and is also reported on its own.
+ */
+export function summariseSegments(segments: readonly Pick<Segment, 'kind' | 'support_status'>[]): LiveSupportSummary {
+  let substantive = 0,
+    supported = 0,
+    pending = 0;
+  for (const s of segments) {
+    if ((s.kind ?? 'substantive') !== 'substantive') continue;
+    substantive += 1;
+    if (s.support_status === 'supported') supported += 1;
+    else if (s.support_status === 'pending') pending += 1;
+  }
+  return {
+    substantive,
+    supported,
+    needs_attention: substantive - supported,
+    pending,
+    score: substantive ? Math.round((supported / substantive) * 100) / 100 : null,
+  };
+}
+
 /** The one key that jumps to the next sentence needing attention. */
 export const NEXT_SHORTCUT = 'n';
 

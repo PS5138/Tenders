@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "local:start": "scripts/local/start.sh",
     "local:stop": "scripts/local/stop.sh",
     "db:reset": "scripts/local/reset-db.sh",

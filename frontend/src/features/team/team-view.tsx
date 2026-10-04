@@ -127,7 +127,7 @@ export function TeamView({
                     <label>
                       <span className="sr-only">Role for {m.displayName}</span>
                       <Select
-                        className="w-auto py-1 text-xs"
+                        className="w-28 py-1 text-xs"
                         value={m.role}
                         disabled={busy === `role-${m.userId}`}
                         onChange={(e) => run(`role-${m.userId}`, { action: 'role', userId: m.userId, role: e.target.value })}
@@ -136,11 +136,14 @@ export function TeamView({
                         <option value="admin">Admin</option>
                       </Select>
                     </label>
-                    {m.userId !== me.userId ? (
-                      <Button size="sm" variant="ghost" onClick={() => setRemoving(m)}>
-                        Remove
-                      </Button>
-                    ) : null}
+                    {/* A fixed slot, empty on your own row, so every role dropdown lines up. */}
+                    <span className="flex w-16 justify-end">
+                      {m.userId !== me.userId ? (
+                        <Button size="sm" variant="ghost" onClick={() => setRemoving(m)}>
+                          Remove
+                        </Button>
+                      ) : null}
+                    </span>
                   </>
                 ) : (
                   <Badge tone={m.role === 'admin' ? 'green' : 'neutral'}>{m.role === 'admin' ? 'Admin' : 'Member'}</Badge>

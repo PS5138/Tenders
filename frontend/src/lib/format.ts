@@ -65,3 +65,17 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * The support score as a decimal to two places (0.91), the form the product and the pitch quote. It is
+ * evidence coverage, the share of substantive sentences with a verified source, not a probability of
+ * being right; callers label it so. Null or missing reads as an em dash.
+ */
+export function formatEvidenceScore(score: number | null | undefined): string {
+  return score == null || Number.isNaN(score) ? '—' : score.toFixed(2);
+}
+
+/** "14 of 16 supported" from a support summary. */
+export function supportedText(summary: { supported: number; substantive: number }): string {
+  return `${summary.supported} of ${summary.substantive} supported`;
+}

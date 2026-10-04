@@ -798,7 +798,15 @@ class _Fact:
     header: str
 
     @property
+    def kind(self) -> str | None:
+        match = re.search(r"kind=(\S+)", self.header)
+        return match.group(1) if match else None
+
+    @property
     def expired(self) -> bool:
+        """Not usable: labelled not current by the prompt, or past its expiry date."""
+        if "status=not_current" in self.header:
+            return True
         match = re.search(r"expires=(\d{4}-\d{2}-\d{2})", self.header)
         return match is not None and date.fromisoformat(match.group(1)) < date.today()
 
@@ -856,7 +864,9 @@ def synthesis_lines(user: str, history: History | None) -> tuple[list[str], Synt
     response_type = re.search(r"Response type: (\S+)", constraints)
     buyer = re.search(r"Buyer: (.+)", constraints)
     candidates = _parse_candidates(_section_of(user, "Candidates"))
-    facts = [fact for fact in _parse_facts(_section_of(user, "Facts")) if not fact.expired]
+    all_facts = _parse_facts(_section_of(user, "Facts"))
+    facts = [fact for fact in all_facts if not fact.expired]
+    stale_facts = [fact for fact in all_facts if fact.expired and fact.statement]
 
     lines: list[str] = []
     run = SynthesisRun(question=question, model_segments=0, merged_segment=False)
@@ -884,16 +894,46 @@ def synthesis_lines(user: str, history: History | None) -> tuple[list[str], Synt
                     cited_facts.append(fact.id)
         return sources
 
+    stale_dropped: list[str] = []
+
+    def current_replacement(sentence: str) -> _Fact | None | bool:
+        """For a candidate sentence repeating a not-current fact: the current fact of the same
+        kind to write from instead, None when there is none (the sentence is dropped), or
+        False when the sentence repeats no stale fact (synthesis rule on stale facts)."""
+        normalised_sentence = normalise(sentence)[0]
+        for stale in stale_facts:
+            if normalise(stale.statement)[0] in normalised_sentence:
+                for fact in facts:
+                    if fact.statement and fact.kind == stale.kind:
+                        return fact
+                stale_dropped.append(stale.kind or "fact")
+                return None
+        return False
+
     def segment(text: str, paragraph: int, candidate: _Candidate | None) -> None:
+        if candidate is None:
+            run.model_segments += 1
+            emit({"type": "segment", "text": text, "paragraph": paragraph,
+                  "kind": "connective", "sources": []})
+            return
+        kept: list[str] = []
+        sources: list[dict[str, Any]] = []
+        for sentence in split_sentences_simple(text) or [text]:
+            replacement = current_replacement(sentence)
+            if replacement is False:
+                kept.append(sentence)
+                sources.extend(sources_for(candidate, sentence))
+            elif isinstance(replacement, _Fact):
+                kept.append(replacement.statement)
+                sources.append({"source_type": "fact", "source_id": replacement.id,
+                                "quote": replacement.statement})
+                if replacement.id not in cited_facts:
+                    cited_facts.append(replacement.id)
+        if not kept:
+            return
         run.model_segments += 1
-        record: dict[str, Any] = {
-            "type": "segment",
-            "text": text,
-            "paragraph": paragraph,
-            "kind": "connective" if candidate is None else "substantive",
-            "sources": [] if candidate is None else sources_for(candidate, text),
-        }
-        emit(record)
+        emit({"type": "segment", "text": " ".join(kept), "paragraph": paragraph,
+              "kind": "substantive", "sources": sources})
 
     short = "short" in instruction.lower() or "concise" in instruction.lower()
     opener = "We set out below how we meet this requirement, drawing on our current submissions."
@@ -937,6 +977,8 @@ def synthesis_lines(user: str, history: History | None) -> tuple[list[str], Synt
         )
     if not candidates:
         gaps.append("No library material was retrieved for this question.")
+    for kind in dict.fromkeys(stale_dropped):
+        gaps.append(f"A current {kind} fact: the only one on file is no longer current.")
     run.gaps = gaps
     run.fact_ids = list(cited_facts)
     emit({"type": "gaps", "gaps": gaps})

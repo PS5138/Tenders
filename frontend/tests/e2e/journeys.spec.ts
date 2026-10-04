@@ -302,8 +302,8 @@ test('the board groups questions and moves them by drag and drop within the revi
   await expect(sam).toContainText(text);
   await expect(sam.getByRole('link')).toHaveCount(before + 1);
 
-  await page.getByRole('tab', { name: 'List', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Sam/ }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Table', exact: true }).click();
+  await expect(page.getByRole('cell', { name: /Sam/ }).first()).toBeVisible();
   await page.getByRole('combobox', { name: 'Owner filter' }).selectOption('Sam');
   await expect(page.getByText(new RegExp(`^${before + 1} of \\d+ questions$`))).toBeVisible();
 });
@@ -328,7 +328,7 @@ for (const width of [1440, 1024, 768, 375])
       .click();
     await page.waitForURL(/\/tenders\/[0-9a-f-]{36}$/);
     const base = page.url();
-    for (const view of ['Board', 'List', 'Document', 'Buyer documents', 'Submission']) {
+    for (const view of ['Board', 'Table', 'Document', 'Buyer documents', 'Submission']) {
       await page.getByRole('tab', { name: view, exact: true }).click();
       await expectNoHorizontalScroll(page);
     }

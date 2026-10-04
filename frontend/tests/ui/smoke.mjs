@@ -198,8 +198,8 @@ try {
         assert(await marker.evaluate((el) => el === document.activeElement), 'Escape from the popover must return focus to the marker');
       }
       if (screen === 'tender') {
-        await page.getByRole('tab', { name: 'List', exact: true }).click();
-        await page.locator('main section ul li').first().waitFor();
+        await page.getByRole('tab', { name: 'Table', exact: true }).click();
+        await page.locator('main table tbody tr').first().waitFor();
       }
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       assert(overflow <= 1, `${screen} overflows ${width}px by ${overflow}px`);

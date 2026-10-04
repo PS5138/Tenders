@@ -84,11 +84,9 @@ def _load_parser() -> tuple[ParseFn, PersistFn]:
 
 
 def _storage_file(storage_path: str) -> Path:
-    """The on-disk path, through owner A's ``storage_file`` when it is available."""
-    try:
-        from app.ingest.storage import storage_file
-    except ImportError:
-        return Path(storage_path)
+    """The on-disk path, through ``app.ingest.storage``."""
+    from app.ingest.storage import storage_file
+
     return storage_file(storage_path)
 
 

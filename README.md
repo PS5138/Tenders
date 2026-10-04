@@ -2,9 +2,42 @@
 
 Ten joins an invite-only Next.js frontend to a private FastAPI service. The backend owns documents, tenders, questions, answers, review and exports. The frontend owns accounts, business membership, notifications and confirmed buyer-form locations.
 
-## Local synthetic stack
+## Quick start
 
-Install Docker with Compose v2, then run from this directory:
+From this folder, one command starts everything:
+
+```sh
+npm run dev
+```
+
+Then open **http://localhost:3000** and sign in as `puru@example-health.test` with password `ten-dev-only` (the other accounts are in the table below). Press **Ctrl-C once** to stop everything.
+
+You need Node 22, [uv](https://docs.astral.sh/uv/) and `curl`. That is all: no Docker, Homebrew or admin rights (macOS on Apple silicon or Linux x86_64). The first run installs what is missing (the Python virtualenv, the frontend packages and the local login service) and takes a few minutes; later runs start in seconds.
+
+What it runs, all on this machine:
+
+| Part | Address | Log |
+|---|---|---|
+| Web app (Next.js) | http://localhost:3000 | this terminal |
+| API (FastAPI) | http://127.0.0.1:8000 (docs at `/docs`) | `storage/dev-api.log` |
+| Worker (ingest and triage) | | `storage/dev-worker.log` |
+| Backend database | Postgres on :54329 | `.devdb/server.log` |
+| Frontend database and login service | Postgres on :54322, Supabase Auth on :9999, gateway on :54321 | `frontend/.local/logs/` |
+
+Every start applies migrations, makes sure the development accounts exist and seeds the synthetic library and a sample tender (`storage/dev-seed.log`). All of it is safe to repeat, and your data persists between runs. The seed runs alongside the app, so library documents read Queued or Parsing for a few seconds after start-up.
+
+It runs in synthetic demo mode with fake providers: only the files in `eval/data` can be uploaded, and the results show that the pipeline works, not model quality. To use real models, export the three provider variables and your keys first:
+
+```sh
+LLM_PROVIDER=anthropic EMBEDDING_PROVIDER=openai SYNTHETIC_DEMO=false \
+ANTHROPIC_API_KEY=... OPENAI_API_KEY=... npm run dev
+```
+
+If it stops with "Port 3000 is already in use", another copy of the app is running; stop it and rerun. To start the parts separately, see the [frontend README](frontend/README.md#native-development-linux-x86_64-and-macos-on-apple-silicon).
+
+## Docker stack
+
+The same application also runs in Docker. Install Docker with Compose v2, then run from this directory:
 
 ```sh
 docker compose up --build -d

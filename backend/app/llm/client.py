@@ -5,7 +5,8 @@ implementation can be scripted per call and so logs and the harness can attribut
 
 Anthropic SDK 1.x: ``client.messages.parse(..., output_format=Model).parsed_output`` for
 structured output and ``client.messages.stream(...).text_stream`` for streaming. No
-``thinking`` parameters are set: claude-opus-5 is adaptive by default and Haiku 4.5 takes none.
+``thinking`` parameters are set: claude-opus-5 and claude-sonnet-5 run adaptive thinking by
+default.
 """
 
 from __future__ import annotations

@@ -14,7 +14,19 @@ import { diffWords } from '@/lib/diff';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorNote, Field, field, label, panel, useResource, type S } from './shared';
-import { Trace, TraceLegend, SourcePane, attentionIndices, focusSegmentMarker, nextAttentionIndex, nextShortcutPressed, NEXT_SHORTCUT, type Source } from './trace';
+import {
+  Trace,
+  TraceLegend,
+  SourcePane,
+  attentionIndices,
+  focusSegmentMarker,
+  nextAttentionIndex,
+  nextShortcutPressed,
+  summariseSegments,
+  NEXT_SHORTCUT,
+  type Source,
+} from './trace';
+import { formatEvidenceScore, wordCount } from '@/lib/format';
 import { useDraftStream } from './use-draft-stream';
 import type { Segment } from '@/lib/backend-stream';
 
@@ -62,7 +74,8 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
   const [text, setText] = useState(currentText),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
-    [conflict, setConflict] = useState<S['AnswerRecord'] | null>(null);
+    [conflict, setConflict] = useState<S['AnswerRecord'] | null>(null),
+    [confirmReload, setConfirmReload] = useState(false);
   // A new current version landed while the editor was open (a draft finished, a colleague saved, a reply
   // was saved as the answer). State is adjusted during render, the React pattern for reacting to a prop
   // change; the compiler lint rules forbid the equivalent synchronous setState inside an effect.
@@ -114,22 +127,32 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
         <div className="rounded border border-amber p-3 text-sm">
           <p className="font-semibold">Another version was saved. Your text is still above.</p>
           <pre className="my-2 whitespace-pre-wrap break-words font-sans">{conflict.text}</pre>
-          <Button
-            onClick={() => {
-              if (window.confirm('Reload the current version? Copy any unsaved edits first.')) {
-                setSeeded({ id: conflict.id, text: conflict.text });
-                setText(conflict.text);
-                setBaseVersion(conflict.id);
-                setConflict(null);
-                setError(null);
-                onSaved();
-              }
-            }}
-          >
-            Reload current answer
-          </Button>
+          <Button onClick={() => setConfirmReload(true)}>Reload current answer</Button>
         </div>
       ) : null}
+      <Dialog
+        open={confirmReload && Boolean(conflict)}
+        onOpenChange={setConfirmReload}
+        title="Reload the current version?"
+        description="Your unsaved text in the editor will be replaced. Copy anything you want to keep first."
+      >
+        <Button
+          variant="primary"
+          onClick={() => {
+            if (conflict) {
+              setSeeded({ id: conflict.id, text: conflict.text });
+              setText(conflict.text);
+              setBaseVersion(conflict.id);
+              setConflict(null);
+              setError(null);
+              onSaved();
+            }
+            setConfirmReload(false);
+          }}
+        >
+          Reload current answer
+        </Button>
+      </Dialog>
     </div>
   );
 }
@@ -137,24 +160,37 @@ function Editor({ workspaceId, question, onSaved }: { workspaceId: string; quest
  * The support summary at the top of the answer. While sentences need attention the whole summary is a
  * button that jumps to the next one; the same jump is on the `n` key.
  */
-function SupportSummary({ answer, onNext }: { answer: S['AnswerRecord']; onNext: () => void }) {
-  const summary = answer.support_summary;
-  const attention = summary.needs_attention;
+function SupportSummary({
+  summary,
+  words,
+  streaming = false,
+  onNext,
+}: {
+  summary: Pick<S['SupportSummary'], 'supported' | 'substantive' | 'needs_attention' | 'score'> & { pending?: number };
+  words: number;
+  /** A draft is streaming: the counts are the streamed sentences so far, and `pending` ones are still being checked. */
+  streaming?: boolean;
+  onNext: () => void;
+}) {
+  const pending = summary.pending ?? 0;
+  // Sentences still being checked are not yet something to jump to; they are reported on their own.
+  const attention = summary.needs_attention - pending;
   const body = (
     <>
       <strong>
         {summary.supported} of {summary.substantive}
       </strong>{' '}
-      substantive sentences supported
-      {attention ? `, ${attention} ${attention === 1 ? 'needs' : 'need'} attention` : ''} · Evidence coverage{' '}
-      {summary.score == null ? 'not available' : `${Math.round(summary.score * 100)}%`} · {answer.word_count} words
+      substantive sentences supported{streaming ? ' so far' : ''}
+      {attention > 0 ? `, ${attention} ${attention === 1 ? 'needs' : 'need'} attention` : ''}
+      {pending ? `, ${pending} being checked` : ''} · Evidence coverage {formatEvidenceScore(summary.score)} · {words} words
       <span className="block font-normal text-muted">
-        {attention ? `Click here or press ${NEXT_SHORTCUT} to jump to the next sentence needing attention. ` : ''}
-        Evidence coverage measures support, not correctness.
+        {attention > 0 ? `Click here or press ${NEXT_SHORTCUT} to jump to the next sentence needing attention. ` : ''}
+        {streaming ? 'Drafting: sources are checked as each sentence arrives. ' : ''}
+        Evidence coverage is the share of substantive sentences with a verified source, not a measure of correctness.
       </span>
     </>
   );
-  return attention ? (
+  return attention > 0 ? (
     <button
       type="button"
       className="flex w-full items-center justify-between gap-3 rounded-md bg-soft px-3 py-2 text-left text-xs hover:bg-line/60 focus:outline-none focus:ring-2 focus:ring-accent"
@@ -524,8 +560,17 @@ export function QuestionWorkspace({
                 </p>
               ) : null}
               <ErrorNote error={stream.state.error} />
-              {answer ? (
-                <SupportSummary answer={answer} onNext={jumpToNext} />
+              {stream.busy ? (
+                stream.state.segments.length ? (
+                  <SupportSummary
+                    summary={summariseSegments(stream.state.segments)}
+                    words={wordCount(stream.state.segments.map((s) => s.text).join(' '))}
+                    streaming
+                    onNext={jumpToNext}
+                  />
+                ) : null
+              ) : answer ? (
+                <SupportSummary summary={answer.support_summary} words={answer.word_count} onNext={jumpToNext} />
               ) : null}
               {visibleSegments.length ? <TraceLegend /> : null}
               <div ref={answerRef} className="relative" onMouseUp={captureSelection} onKeyUp={captureSelection}>
@@ -956,8 +1001,9 @@ function Assistant({
 }) {
   const thread = useResource<S['ThreadRecord']>(workspaceId, `/threads/${threadId}`),
     stream = useDraftStream(workspaceId);
+  // A save-as-answer or verbatim request the backend refused with a displacement 409, waiting for confirmation.
   const [error, setError] = useState<string | null>(null),
-    [pending, setPending] = useState<string | null>(null),
+    [pending, setPending] = useState<{ path: string; body: Record<string, unknown>; description: string } | null>(null),
     [busy, setBusy] = useState(false);
   const { reload: reloadThread } = thread;
   useEffect(() => {
@@ -968,23 +1014,35 @@ function Assistant({
     const timer = setInterval(() => void reloadThread(), 2000);
     return () => clearInterval(timer);
   }, [thread.data?.reply_in_progress, stream.busy, reloadThread]);
-  async function save(id: string, confirmed = false) {
+  /**
+   * Make an AI version current: save a reply as the answer, or use previously submitted wording. The
+   * request goes without `confirm_displace` first; only when the backend answers 409 `displacement`
+   * (a person has worked on the current answer) is the person asked, and the confirmed retry carries it.
+   */
+  async function replaceAnswer(path: string, body: Record<string, unknown>, description: string, confirmed = false) {
     setBusy(true);
     setError(null);
     try {
-      await backendJson(workspaceId, `/messages/${id}/save-as-answer`, 'POST', {
-        confirm_displace: confirmed,
-      });
+      await backendJson(workspaceId, path, 'POST', confirmed ? { ...body, confirm_displace: true } : body);
       await reloadThread();
       onSaved();
       setPending(null);
     } catch (e) {
-      if (e instanceof BackendRequestError && e.detail.code === 'displacement') setPending(id);
-      else setError((e as Error).message);
+      if (!confirmed && e instanceof BackendRequestError && e.detail.code === 'displacement') setPending({ path, body, description });
+      else {
+        setPending(null);
+        setError((e as Error).message);
+      }
     } finally {
       setBusy(false);
     }
   }
+  const save = (id: string) =>
+    replaceAnswer(
+      `/messages/${id}/save-as-answer`,
+      {},
+      'This reply will become the current AI draft. The existing answer remains in version history.',
+    );
   return (
     <section className="space-y-4">
       <h2 className="sr-only">Question assistant</h2>
@@ -1015,26 +1073,13 @@ function Assistant({
               <Button
                 size="sm"
                 busy={busy}
-                onClick={async () => {
-                  if (
-                    !window.confirm(
-                      'Use this previously submitted wording as the current answer? The existing answer stays in version history.',
-                    )
+                onClick={() =>
+                  void replaceAnswer(
+                    `/questions/${question.id}/verbatim`,
+                    { source_item_id: m.verbatim!.source_item_id },
+                    'The previously submitted wording will become the current AI draft. The existing answer remains in version history.',
                   )
-                    return;
-                  setBusy(true);
-                  try {
-                    await backendJson(workspaceId, `/questions/${question.id}/verbatim`, 'POST', {
-                      source_item_id: m.verbatim!.source_item_id,
-                      confirm_displace: true,
-                    });
-                    onSaved();
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
+                }
               >
                 Use this wording
               </Button>
@@ -1091,12 +1136,13 @@ function Assistant({
           if (!open) setPending(null);
         }}
         title="Replace the current answer?"
-        description="This reply will become the current AI draft. The existing answer remains in version history."
+        description={`A person has worked on this answer. ${pending?.description ?? ''}`}
       >
         <Button
+          variant="primary"
           busy={busy}
           onClick={() => {
-            if (pending) void save(pending, true);
+            if (pending) void replaceAnswer(pending.path, pending.body, pending.description, true);
           }}
         >
           Replace current answer

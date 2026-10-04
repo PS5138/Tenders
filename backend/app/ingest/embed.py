@@ -23,14 +23,12 @@ HEADING_PATH_SEPARATOR = " > "
 
 
 def chunk_embedding_input(session: Session, item: KnowledgeItem) -> str:
-    """The string embedded for a chunk: owner A's ``app.ingest.chunk.embedding_input`` when it
-    exists, otherwise the section's heading path prepended to the raw slice."""
+    """The string embedded for a chunk: ``app.ingest.chunk.embedding_input``, or the raw slice
+    prefixed by nothing when the section row is missing."""
+    from app.ingest.chunk import embedding_input
+
     section = session.get(DocumentSection, item.section_id)
-    try:
-        from app.ingest.chunk import embedding_input
-    except ImportError:
-        embedding_input = None
-    if embedding_input is not None and section is not None:
+    if section is not None:
         return str(embedding_input(item, section))
     heading = ""
     if section is not None and section.heading_path:

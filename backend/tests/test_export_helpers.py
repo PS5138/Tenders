@@ -98,7 +98,7 @@ def make_answer(
         segments=segments or [],
         is_current=is_current,
         model="claude-opus-5" if author_type == "ai" else None,
-        prompt_version="synthesis.v1" if author_type == "ai" else None,
+        prompt_version="synthesis.v2" if author_type == "ai" else None,
     )
     session.add(answer)
     session.flush()

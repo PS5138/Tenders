@@ -45,20 +45,8 @@ _FACT_KEY_MAX = 256
 def call_invalidate(
     session: Session, source_type: str, source_id: uuid.UUID, reason: str | InvalidationReason
 ) -> None:
-    """Call the review module's fact-invalidation function.
-
-    Until the review owner lands it the stub raises ``NotImplementedError``; that is logged
-    and ingestion carries on, because supersession must not fail on a missing downstream.
-    """
-    try:
-        review_invalidation.invalidate(session, source_type, source_id, str(reason))
-    except NotImplementedError:
-        logger.warning(
-            "fact invalidation not available yet: %s %s (%s) not propagated to answers",
-            source_type,
-            source_id,
-            reason,
-        )
+    """Call the review module's fact-invalidation function (one name tests can patch)."""
+    review_invalidation.invalidate(session, source_type, source_id, str(reason))
 
 
 def _get(raw: Any, name: str, default: Any = None) -> Any:

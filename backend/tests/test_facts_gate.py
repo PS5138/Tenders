@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import date
 
 import pytest
@@ -218,17 +217,3 @@ def test_the_latest_of_several_successors_is_chosen(db_session: Session) -> None
     assert middle.superseded_by == latest.id
     assert latest.superseded_by is None
 
-
-def test_missing_invalidation_does_not_break_ingestion(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.review import invalidation
-
-    def not_ready(*_: object, **__: object) -> None:
-        raise NotImplementedError
-
-    monkeypatch.setattr(invalidation, "invalidate", not_ready)
-    older_doc, newer_doc, older, newer = _pair(db_session)
-    evaluate_fact_supersession(db_session, older_doc)
-    assert older.superseded_by == newer.id
-    assert isinstance(older.id, uuid.UUID)

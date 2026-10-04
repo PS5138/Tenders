@@ -29,8 +29,12 @@ echo "$url_line" >&2
 cd "$ROOT/backend"
 "$PY" -m app.worker >"$STORAGE_PATH/dev-worker.log" 2>&1 &
 WORKER=$!
-trap 'kill "$WORKER" 2>/dev/null || true' EXIT
 echo "worker pid $WORKER (log: $STORAGE_PATH/dev-worker.log)" >&2
 echo "providers: LLM_PROVIDER=$LLM_PROVIDER EMBEDDING_PROVIDER=$EMBEDDING_PROVIDER SYNTHETIC_DEMO=$SYNTHETIC_DEMO" >&2
 
-exec "$ROOT/.venv/bin/uvicorn" app.main:app --host 127.0.0.1 --port "${PORT:-8000}" --workers 1
+# Not exec: the shell must outlive uvicorn so the trap stops the worker too, whether the stack
+# is ended by Ctrl-C or by a SIGTERM to this script (as a launcher sends).
+"$ROOT/.venv/bin/uvicorn" app.main:app --host 127.0.0.1 --port "${PORT:-8000}" --workers 1 &
+API=$!
+trap 'kill "$API" "$WORKER" 2>/dev/null || true' EXIT INT TERM
+wait "$API"

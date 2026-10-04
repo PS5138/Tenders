@@ -135,7 +135,7 @@ def test_draft_question_streams_conformed_segments_and_persists_a_version(
     assert answer.author_type == "ai" and answer.author_name is None
     assert answer.version == 1 and answer.is_current is True
     assert answer.model == settings.model_main
-    assert answer.prompt_version == "synthesis.v1"
+    assert answer.prompt_version == "synthesis.v2"
     assert answer.text == join_segments(answer.segments)
     assert answer.text.count("\n\n") == 2, "three paragraphs"
     assert answer.word_count == len(answer.text.split())
@@ -170,6 +170,7 @@ def test_draft_question_streams_conformed_segments_and_persists_a_version(
     assert "End of section." not in synthesis_call.user
     assert f"[item:{library.item.id}]" in synthesis_call.user
     assert f"[fact:{library.fact.id}]" in synthesis_call.user
+    assert "status=current" in synthesis_call.user
     assert "Word limit: 300" in synthesis_call.user
     assert "Buyer: Example NHS Trust" in synthesis_call.user
     assert synthesis_call.model == settings.model_main
@@ -371,7 +372,7 @@ def test_reply_in_thread_first_turn_uses_the_question_and_persists_a_message(
     assert message.gaps == [GAP]
     assert message.fact_checklist[0]["fact_id"] == str(library.fact.id)
     assert message.model == get_settings().model_main
-    assert message.prompt_version == "synthesis.v1"
+    assert message.prompt_version == "synthesis.v2"
     assert message.support_summary["substantive"] == 5
     assert stubbed_modules.calls[0] == ("retrieve", question.text, ["clinical_safety"])
     synthesis_call = next(c for c in stubbed_modules.fake_llm.calls if c.name == "synthesis")
@@ -588,7 +589,7 @@ def test_persist_ai_answer_re_reads_the_question_before_displacing(
             gaps=[],
             fact_checklist=[],
             model="fake-model",
-            prompt_version="synthesis.v1",
+            prompt_version="synthesis.v2",
         )
     assert excinfo.value.code == "displacement"
     assert excinfo.value.current_answer["id"] == str(human_id)
@@ -614,8 +615,43 @@ def test_persist_ai_answer_re_reads_the_question_before_displacing(
         gaps=[],
         fact_checklist=[],
         model="fake-model",
-        prompt_version="synthesis.v1",
+        prompt_version="synthesis.v2",
     )
     assert answer.is_current and answer.version == 2
     db_session.refresh(human := db_session.get(Answer, human_id))
     assert human.is_current is False
+
+
+def test_fact_blocks_label_facts_that_are_not_current() -> None:
+    """Facts attached to a retrieved item reach the prompt whatever their state; each block
+    says whether the model may rely on it (draft step 5, synthesis rule on stale facts)."""
+    import uuid as _uuid
+    from datetime import date as _date
+
+    from app.db.models import Document, Fact
+    from app.generate.pipeline import FactContext, build_synthesis_user_message
+
+    def context(**fact_fields: object) -> FactContext:
+        fact = Fact(
+            id=_uuid.uuid4(), fact_kind="iso_27001", value="IS 12345", statement="We hold ISO.",
+            effective_date=_date(2024, 1, 1), **fact_fields,
+        )
+        document = Document(filename="iso.docx")
+        return FactContext(fact=fact, section=None, document=document)
+
+    current = context()
+    superseded = context(superseded_by=_uuid.uuid4())
+    expired = context(expires_on=_date(2020, 1, 1))
+    from_superseded_document = context()
+    from_superseded_document.document.superseded_by = _uuid.uuid4()
+
+    message = build_synthesis_user_message(
+        query_text="Do you hold ISO 27001?", response_type="free_text", word_limit=None,
+        buyer=None, instruction=None, candidates=[],
+        facts=[current, superseded, expired, from_superseded_document],
+    )
+    blocks = message.split("## Facts\n", 1)[1].split("\n\n")
+    assert "status=current" in blocks[0]
+    assert "status=not_current reason=superseded" in blocks[1]
+    assert "status=not_current reason=expired" in blocks[2]
+    assert "status=not_current reason=document_superseded" in blocks[3]

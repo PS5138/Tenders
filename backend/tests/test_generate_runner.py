@@ -107,7 +107,7 @@ async def test_start_draft_streams_and_persists_then_clears_the_registry(
     assert done["word_count"] == answer.word_count
     assert done["segments"] == answer.segments
     assert done["support_summary"] == answer.support_summary
-    assert done["model"] == answer.model and done["prompt_version"] == "synthesis.v1"
+    assert done["model"] == answer.model and done["prompt_version"] == "synthesis.v2"
     assert done["verbatim"]["source_item_id"] == str(library.item.id)
     db_session.refresh(question)
     assert question.status == "ai_draft"

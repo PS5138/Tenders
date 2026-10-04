@@ -365,7 +365,7 @@ async def step_3_draft(
     assert answers[0]["is_current"] and answers[0]["version"] == 1
     assert answers[0]["segments"] == done["segments"]
     assert answers[0]["support_summary"] == done["support_summary"]
-    assert done["model"] and done["prompt_version"] == "synthesis.v1"
+    assert done["model"] and done["prompt_version"] == "synthesis.v2"
     assert done["word_count"] == len(done["text"].split())
     if offer is not None:
         # The pack question repeats a past question word for word: the offer is persisted by

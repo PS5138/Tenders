@@ -385,6 +385,11 @@ def evaluate_document_supersession(
             if document.superseded_by is not None:
                 break
 
+    if document.superseded_by is not None:
+        # A superseded document's items are always excluded, including items an extracting
+        # re-run created after a human decision that this evaluation leaves standing.
+        _exclude_items(session, document.id, True)
+
     if _cascade:
         for partner in stale_partners:
             evaluate_document_supersession(session, partner, _cascade=False)
