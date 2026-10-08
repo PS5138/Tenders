@@ -17,7 +17,10 @@ export const DEV_ACCOUNTS: DevAccount[] = [
   { key: 'riley', email: 'riley@riverside-medical.test', name: 'Riley', title: 'Bid writer', business: 'riverside', role: 'member' },
 ];
 
-/** The switch is on only when explicitly enabled in a development stack. */
+/**
+ * The switch is on by default while the team tests, including `npm run dev`. It stays off in
+ * demo mode (a hosted buyer demonstration), and DEMO_USER_SWITCH=false turns it off anywhere.
+ */
 export function devSwitchEnabled(mode: string | undefined, flag: string | undefined): boolean {
-  return mode === 'development' && flag === 'true';
+  return mode !== 'demo' && flag !== 'false';
 }
