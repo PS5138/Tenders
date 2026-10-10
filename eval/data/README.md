@@ -39,6 +39,7 @@ same specification, so the ground truth is correct whichever writer produced the
 | `past_submission_northern_fells_2025_heldout.docx` | past submission, **held out** | layout: numbered form with a boxed answer cell; submitted 18 July 2025 |
 | `reference_iso27001_certificate_2024.docx` | reference, `iso_27001` | states "Certificate issued 12 March 2024" in its first paragraph |
 | `reference_iso27001_certificate_2025.docx` | reference, `iso_27001` | states "Certificate issued 9 March 2025"; supersedes the 2024 certificate once both are confirmed |
+| `specification_northern_fells_2025.docx` | tender document, `specification` | 17 requirements: numbered paragraphs plus an Interoperability table (Ref, Requirement, Priority); the introduction places no obligation; `manifest.json` records each requirement's ref, priority, text and whether the library covers it fully, in part or not at all |
 | `question_pack_northern_fells_2025.xlsx` | question pack | one sheet, columns Section, Number, Question, Word limit, Weighting, Response type, Mandatory; about 43 rows |
 | `ground_truth.json` | held-out mapping | see below |
 | `manifest.json` | what was generated | per file: role, layout, expected classification, pairs with concept ids, near-identical links, writer and model |

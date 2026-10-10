@@ -8,20 +8,21 @@ import { ShellCountsProvider } from './shell-counts';
 import { SideNav } from './side-nav';
 import { TopBar } from './top-bar';
 
-type AiMode = import('@/server/backend/health').BackendHealth;
+type AiMode = import('@/server/backend/health').AiMode;
+
+const AI_MODE_TEXT: Record<AiMode, string> = {
+  unavailable: 'Backend unavailable. Please try again shortly.',
+  synthetic:
+    'Synthetic demonstration business: the AI is simulated and only the supplied synthetic documents can be uploaded. Use Live workspace for real tenders.',
+  'no-keys':
+    'Live business, but no AI keys are configured yet. Add ANTHROPIC_API_KEY and OPENAI_API_KEY to the .env file at the repository root and restart.',
+  live: 'Live AI (Anthropic and OpenAI). Review every answer before approval.',
+};
+
 function AiModeBanner({ ai }: { ai: AiMode }) {
-  const live =
-    ai.status === 'ok' &&
-    ai.llm_provider === 'anthropic' &&
-    ['openai', 'voyage'].includes(ai.embedding_provider ?? '') &&
-    !ai.synthetic_demo;
   return (
-    <p role="status" className={`border-b border-line px-4 py-1.5 text-[11px] sm:px-6 ${live ? 'text-muted' : 'bg-amber-bg text-amber'}`}>
-      {ai.status !== 'ok'
-        ? 'Backend unavailable. Please try again shortly.'
-        : live
-          ? 'Live providers connected. Review every answer before approval.'
-          : `Synthetic development mode (${ai.llm_provider ?? 'unknown'} / ${ai.embedding_provider ?? 'unknown'}). Use the supplied synthetic documents only. Not ready for buyer demonstrations.`}
+    <p role="status" className={`border-b border-line px-4 py-1.5 text-[11px] sm:px-6 ${ai === 'live' ? 'text-muted' : 'bg-amber-bg text-amber'}`}>
+      {AI_MODE_TEXT[ai]}
     </p>
   );
 }

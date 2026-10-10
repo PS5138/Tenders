@@ -20,6 +20,8 @@ PROMPT_VERSIONS: dict[str, str] = {
     "synthesis": "v2",
     "entailment": "v1",
     "synthetic_answers": "v1",
+    "extract_requirements": "v1",
+    "requirement_judgement": "v1",
 }
 
 

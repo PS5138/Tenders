@@ -26,12 +26,21 @@ What it runs, all on this machine:
 
 Every start applies migrations, makes sure the development accounts exist and seeds the synthetic library and a sample tender (`storage/dev-seed.log`). All of it is safe to repeat, and your data persists between runs. The seed runs alongside the app, so library documents read Queued or Parsing for a few seconds after start-up.
 
-It runs in synthetic demo mode with fake providers: only the files in `eval/data` can be uploaded, and the results show that the pipeline works, not model quality. To use real models, export the three provider variables and your keys first:
+### Synthetic sample and live work
+
+You can switch between two businesses from the business menu in the top bar:
+
+- **Example Health (fictional)** is the synthetic demonstration. It holds the sample library and the *Northern Fells 2025 (synthetic)* tender, its AI is simulated (no keys and no calls to any provider), and it accepts only the files in `eval/data`. It always stays this way.
+- **Live workspace** is for real work: your own past submissions, certificates and tenders, any file, and the real models (Claude for reading, drafting and checking; OpenAI for search embeddings). Its library is separate, so nothing synthetic is ever used for a real tender.
+
+To switch on the real models, put your keys in the `.env` file at the repository root (it is gitignored) and restart `npm run dev`:
 
 ```sh
-LLM_PROVIDER=anthropic EMBEDDING_PROVIDER=openai SYNTHETIC_DEMO=false \
-ANTHROPIC_API_KEY=... OPENAI_API_KEY=... npm run dev
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 ```
+
+The start-up message says which mode it is in. While a key is empty, Live workspace runs on the simulated AI too and its banner says so. Live runs spend tokens: ingesting a document and triaging a 40-question pack make a few hundred model calls. Start a live tender by uploading a few real past submissions to the Live workspace library, so coverage has something to find.
 
 If it stops with "Port 3000 is already in use", another copy of the app is running; stop it and rerun. To start the parts separately, see the [frontend README](frontend/README.md#native-development-linux-x86_64-and-macos-on-apple-silicon).
 

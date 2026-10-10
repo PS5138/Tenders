@@ -106,8 +106,8 @@ def test_check_builds_no_client(
     settings_override: Callable[..., Settings], no_sdk_fallbacks: None
 ) -> None:
     """The check must not import or construct an SDK client: it only reads settings."""
-    from app.llm.client import get_llm, reset_llm
-    from app.llm.embeddings import get_embedder, reset_embedder
+    from app.llm.client import _provider_llm, _synthetic_llm, reset_llm
+    from app.llm.embeddings import _provider_embedder, _synthetic_embedder, reset_embedder
 
     settings = settings_override(
         llm_provider="anthropic",
@@ -118,8 +118,8 @@ def test_check_builds_no_client(
     reset_llm()
     reset_embedder()
     check_provider_configuration(settings)
-    assert get_llm.cache_info().currsize == 0
-    assert get_embedder.cache_info().currsize == 0
+    for cached in (_provider_llm, _synthetic_llm, _provider_embedder, _synthetic_embedder):
+        assert cached.cache_info().currsize == 0
 
 
 def test_create_app_refuses_a_real_provider_without_its_key(

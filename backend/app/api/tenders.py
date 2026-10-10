@@ -28,17 +28,29 @@ from app.api.documents import (
     read_upload,
     store_upload,
 )
+from app.api.requirements import requirement_summaries
 from app.api.schemas import (
     CurrentAnswerSummary,
     JobRecord,
     QuestionListItem,
+    RequirementCounts,
     TenderDetail,
     TenderDocumentSummary,
     TenderListItem,
 )
 from app.config import get_settings
 from app.db import enums as e
-from app.db.models import Answer, Document, Event, Job, Question, Tender, Thread, utcnow
+from app.db.models import (
+    Answer,
+    Document,
+    Event,
+    Job,
+    Question,
+    Requirement,
+    Tender,
+    Thread,
+    utcnow,
+)
 from app.jobs import enqueue
 from app.review.events import record_event
 from app.review.support import summarise_support
@@ -210,6 +222,7 @@ def _detail(db: Session, tender: Tender) -> TenderDetail:
         select(Document).where(Document.tender_id == tender.id).order_by(Document.created_at)
     ).all()
     base = _list_item(tender, aggregates).model_dump()
+    requirements = requirement_summaries(db, [tender.id])[tender.id]
     return TenderDetail(
         **base,
         outcome_notes=tender.outcome_notes,
@@ -218,6 +231,10 @@ def _detail(db: Session, tender: Tender) -> TenderDetail:
         submitted_at=tender.submitted_at,
         extract_job_id=tender.extract_job_id,
         triage_job_id=tender.triage_job_id,
+        requirements_job_id=tender.requirements_job_id,
+        requirement_counts=RequirementCounts(
+            **requirements.model_dump(include={"green", "amber", "red", "unrated", "total"})
+        ),
         c_count=aggregates.c_count,
         unclassified_mandatory_count=aggregates.unclassified_mandatory_count,
         needs_review_count=aggregates.needs_review_count,
@@ -268,8 +285,9 @@ def list_tenders(db: DbSession, org_id: OrgId) -> list[TenderListItem]:
 
 @router.get("/{tender_id}", response_model=TenderDetail)
 def get_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId) -> TenderDetail:
-    """Tender row plus aggregates, c_count, unclassified_mandatory_count, needs_review_count,
-    the latest job ids and the tender's documents."""
+    """Tender row plus aggregates, requirement_counts (specification requirements by confirmed
+    compliance class), needs_review_count, the latest job ids and the tender's documents.
+    c_count and unclassified_mandatory_count (question-level) are kept for compatibility."""
     return _detail(db, _get_tender(db, tender_id, org_id))
 
 
@@ -322,7 +340,8 @@ def delete_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Act
     threads and their events. A submitted tender is a record (its approved answers may be in the
     library) and is archived instead: 409. Refused with 409 while anything is still writing
     into the rows being removed: a queued or running job whose payload names the tender
-    (``extract_questions``, ``triage_tender``, ``draft_all``) or one of its documents (the
+    (``extract_questions``, ``triage_tender``, ``draft_all``, ``extract_requirements``) or one
+    of its documents (the
     parse-only ``ingest_document`` carries ``{document_id, actor}`` and no ``tender_id``), a
     question draft in progress, or a streaming reply on one of the tender's threads."""
     tender = _get_tender(db, tender_id, org_id)
@@ -369,12 +388,21 @@ def delete_tender(tender_id: uuid.UUID, db: DbSession, org_id: OrgId, actor: Act
         if question_ids
         else []
     )
+    requirement_ids = list(
+        db.scalars(select(Requirement.id).where(Requirement.tender_id == tender.id))
+    )
     paths = [document.storage_path for document in documents if document.storage_path]
-    entity_ids = [tender.id, *question_ids, *answer_ids, *(d.id for d in documents)]
+    entity_ids = [
+        tender.id,
+        *question_ids,
+        *answer_ids,
+        *requirement_ids,
+        *(d.id for d in documents),
+    ]
     db.execute(delete(Event).where(Event.org_id == org_id, Event.entity_id.in_(entity_ids)))
-    # Documents, sections, questions, answers, evidence, comments, threads and messages go by
-    # ON DELETE CASCADE from the tender. A SQL delete, so the ORM does not try to detach
-    # already-loaded children by nulling their tender_id first.
+    # Documents, sections, requirements, questions, answers, evidence, comments, threads and
+    # messages go by ON DELETE CASCADE from the tender. A SQL delete, so the ORM does not try
+    # to detach already-loaded children by nulling their tender_id first.
     db.execute(delete(Tender).where(Tender.id == tender.id, Tender.org_id == org_id))
     db.commit()
     db.expunge_all()
@@ -400,9 +428,10 @@ def _store_upload(
 ) -> str:
     """Store bytes already read through ``app.api.documents.read_upload`` via
     ``app.api.documents.store_upload``, the same path as ``POST /documents``: it applies the
-    ``SYNTHETIC_DEMO`` checksum gate (422 for bytes that are not one of the supplied synthetic
-    files) and then writes through ``app.ingest.storage.save_upload``, so both upload routes
-    are bounded, gated and stored alike."""
+    synthetic checksum gate (422, in a synthetic deployment or organisation, for bytes that are
+    not one of the supplied synthetic files) and then writes through
+    ``app.ingest.storage.save_upload``, so both upload routes are bounded, gated and stored
+    alike."""
     return store_upload(org_id, document_id, upload.filename or "upload", data)
 
 

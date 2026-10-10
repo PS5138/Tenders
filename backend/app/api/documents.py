@@ -44,6 +44,7 @@ from app.ingest.corrections import (
 from app.ingest.dedup import deduplicate
 from app.ingest.embed import embed_items
 from app.jobs import enqueue
+from app.llm.scope import is_synthetic
 from app.review.events import record_event
 
 logger = logging.getLogger(__name__)
@@ -246,7 +247,9 @@ def store_upload(org_id: uuid.UUID, document_id: uuid.UUID, filename: str, data:
     Uses owner A's ``app.ingest.storage.save_upload(data, filename, *, document_id, org_id)``
     when it exists so both upload endpoints store files the same way.
     """
-    if get_settings().synthetic_demo:
+    # A synthetic deployment or organisation accepts only the supplied synthetic files: its
+    # stand-in providers know their layouts and extract nothing useful from anything else.
+    if is_synthetic():
         import hashlib
 
         from app.config import REPO_ROOT
@@ -259,7 +262,9 @@ def store_upload(org_id: uuid.UUID, document_id: uuid.UUID, filename: str, data:
         )
         if not allowed:
             raise HTTPException(
-                422, "Synthetic demo mode accepts only the supplied synthetic files."
+                422,
+                "Synthetic demo mode accepts only the supplied synthetic files. Upload your "
+                "own documents in a live business.",
             )
     try:
         from app.ingest.storage import save_upload

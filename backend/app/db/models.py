@@ -83,6 +83,12 @@ class Organisation(IdTimestampMixin, Base):
     topic_taxonomy: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=_EMPTY_JSON_LIST
     )
+    # A demonstration business: its work uses the synthetic providers and its uploads are
+    # limited to the supplied synthetic files, whatever the deployment's providers are
+    # (``app.llm.scope``).
+    synthetic: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
 
 
 class Document(OrgScopedMixin, Base):
@@ -404,6 +410,10 @@ class Tender(OrgScopedMixin, Base):
     triage_job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL")
     )
+    # The latest extract_requirements run (migration 0004).
+    requirements_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL")
+    )
 
     documents: Mapped[list[Document]] = relationship(
         primaryjoin="Tender.id == Document.tender_id", order_by="Document.created_at"
@@ -509,6 +519,81 @@ class QuestionEvidence(OrgScopedMixin, Base):
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
     )
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class Requirement(OrgScopedMixin, Base):
+    """A specification requirement extracted from a tender document (migration 0004).
+
+    The extracted fields (``ref``, ``text``, ``priority``, ``topics``, the locator and the AI
+    ``suggested_class``) are rewritten by every ``extract_requirements`` run. The human fields
+    (``compliance_class``, ``compliant_by``, ``comment``, ``owner``, ``rated_by``,
+    ``rated_at``) are written only by ``PATCH /requirements/{id}``; a run never touches them and
+    never deletes a row a person has worked on. ``key`` is the stable identity a re-run upserts
+    on: the located span in its section, or a hash of the normalised text when not located.
+    ``compliance_class`` is the supplier's rating (A compliant now, B compliant by a date, C
+    cannot comply); the interface shows it as Green, Amber and Red, and colours are never
+    stored.
+    """
+
+    __tablename__ = "requirements"
+    __table_args__ = (
+        UniqueConstraint("tender_id", "key", name="uq_requirements_tender_key"),
+        e.enum_check(
+            "priority", e.values(e.RequirementPriority), "ck_requirements_priority"
+        ),
+        e.enum_check(
+            "suggested_class", e.values(e.ComplianceClass), "ck_requirements_suggested_class"
+        ),
+        e.enum_check(
+            "compliance_class", e.values(e.ComplianceClass), "ck_requirements_compliance_class"
+        ),
+        Index("ix_requirements_tender_order", "tender_id", "order_index"),
+    )
+
+    tender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False
+    )
+    # The tender document the requirement was extracted from.
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    section_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("document_sections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Code-point offsets of the requirement text in the section; null when not located.
+    start: Mapped[int | None] = mapped_column(Integer)
+    end: Mapped[int | None] = mapped_column(Integer)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    ref: Mapped[str | None] = mapped_column(String(64))
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[str | None] = mapped_column(String(8))
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    topics: Mapped[list[str]] = mapped_column(
+        ARRAY(String(64)), nullable=False, default=list, server_default=_EMPTY_TEXT_ARRAY
+    )
+    suggested_class: Mapped[str | None] = mapped_column(String(1))
+    suggestion: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=_EMPTY_JSON_OBJECT
+    )
+    compliance_class: Mapped[str | None] = mapped_column(String(1))
+    compliant_by: Mapped[date | None] = mapped_column(Date)
+    comment: Mapped[str | None] = mapped_column(Text)
+    owner: Mapped[str | None] = mapped_column(String(200))
+    rated_by: Mapped[str | None] = mapped_column(String(200))
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def has_human_input(self) -> bool:
+        """True once a person has rated, commented on or taken ownership of the row."""
+        return bool(
+            self.compliance_class
+            or self.compliant_by
+            or (self.comment or "").strip()
+            or self.owner
+            or self.rated_at
+        )
 
 
 class Answer(OrgScopedMixin, Base):
@@ -656,6 +741,7 @@ __all__ = [
     "Organisation",
     "Question",
     "QuestionEvidence",
+    "Requirement",
     "SupersessionDecision",
     "Tender",
     "Thread",

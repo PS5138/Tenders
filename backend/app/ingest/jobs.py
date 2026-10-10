@@ -10,6 +10,9 @@ Before running a stage other than parsing or classifying from a resume, the hand
 ``app.ingest.corrections.rerun_from_stage`` so the stage's earlier outputs are deleted first;
 sections are never deleted and ``persist_sections`` is idempotent on its own.
 
+A tender document that reaches ``ready`` enqueues the tender's ``extract_requirements`` scan
+(``app.ingest.requirements``) in the same commit.
+
 Every step is a plain import: a missing or renamed step fails at import time rather than
 letting a document reach ``ready`` without embeddings, deduplication or supersession.
 """
@@ -25,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import enums as e
-from app.db.models import Document, DocumentSection, Job, KnowledgeItem
+from app.db.models import Document, DocumentSection, Job, KnowledgeItem, Tender
 from app.ingest.chunk import chunk_reference
 from app.ingest.classify import classify_document
 from app.ingest.corrections import rerun_from_stage
@@ -34,6 +37,7 @@ from app.ingest.embed import embed_items
 from app.ingest.extract import extract_pairs
 from app.ingest.facts import evaluate_fact_supersession, persist_facts
 from app.ingest.parse import parse_document, persist_sections
+from app.ingest.requirements import request_requirements_scan
 from app.ingest.storage import storage_file
 from app.ingest.supersession import evaluate_document_supersession
 from app.jobs import enqueue, register, set_progress
@@ -217,8 +221,22 @@ def run_ingest(session: Session, document: Document, job: Job | None = None) -> 
 
     document.ingest_status = e.IngestStatus.READY.value
     document.ingest_error = None
+    _request_requirements_scan(session, document, job)
     session.commit()
     logger.info("%s: ready", document.filename)
+
+
+def _request_requirements_scan(session: Session, document: Document, job: Job | None) -> None:
+    """A tender document that has just reached ``ready`` gives the tender's requirement scan
+    something new to read: enqueue one in the same transaction as the status, so a crash
+    between the two cannot leave the document ready and unscanned."""
+    if document.doc_type != e.DocType.TENDER_DOCUMENT.value or document.tender_id is None:
+        return
+    tender = session.get(Tender, document.tender_id)
+    if tender is None:
+        return
+    actor = str(((job.payload or {}) if job is not None else {}).get("actor") or "system")
+    request_requirements_scan(session, tender, actor)
 
 
 @register(e.JobKind.INGEST_DOCUMENT)

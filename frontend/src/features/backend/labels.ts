@@ -28,6 +28,7 @@ const LABELS: Record<string, string> = {
   extract_questions: 'Finding questions',
   triage_tender: 'Checking library coverage',
   draft_all: 'Drafting answers',
+  extract_requirements: 'Finding specification requirements',
   queued: 'Queued',
   parsing: 'Reading',
   classifying: 'Classifying',

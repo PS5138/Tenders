@@ -38,6 +38,7 @@ from app.db.models import Job, Question, Tender
 from app.db.session import new_session
 from app.errors import format_error
 from app.jobs import enqueue, register, set_progress
+from app.llm.scope import run_in_context
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +221,9 @@ def triage_tender(session: Session, job: Job) -> None:
     outcomes: list[TriageOutcome] = []
     executor = _make_executor(pool_workers(session, settings.triage_concurrency))
     try:
-        futures = [executor.submit(triage_one, qid, coverage_fn) for qid in question_ids]
+        # Pool threads do not inherit the job's organisation scope (``app.llm.scope``).
+        scoped_triage = run_in_context(triage_one)
+        futures = [executor.submit(scoped_triage, qid, coverage_fn) for qid in question_ids]
         for done, future in enumerate(as_completed(futures), start=already + 1):
             outcome = future.result()
             outcomes.append(outcome)

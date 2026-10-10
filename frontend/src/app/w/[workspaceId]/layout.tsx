@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSessionUser } from '@/server/auth';
-import { getBackendHealth } from '@/server/backend/health';
+import { backendIdentity } from '@/server/backend/context';
+import { aiMode, getBackendHealth, getBusinessSynthetic } from '@/server/backend/health';
 import { AppError } from '@/server/errors';
 import { getShell } from '@/server/services/workspaces';
 import { AppShell } from '@/features/shell/app-shell';
@@ -16,8 +17,14 @@ export default async function WorkspaceLayout({ children, params }: LayoutProps<
     if (err instanceof AppError && err.code === 'NOT_FOUND') notFound();
     throw err;
   }
+  const [health, synthetic] = await Promise.all([
+    getBackendHealth().catch(() => null),
+    backendIdentity(user.id, workspaceId)
+      .then(getBusinessSynthetic)
+      .catch(() => null),
+  ]);
   return (
-    <AppShell shell={shell} ai={await getBackendHealth().catch(() => ({ status: 'unavailable' }))}>
+    <AppShell shell={shell} ai={aiMode(health, synthetic)}>
       {children}
     </AppShell>
   );

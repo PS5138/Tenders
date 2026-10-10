@@ -14,7 +14,6 @@ import { EmptyState } from '@/components/ui/states';
 import { StatusBadge } from './badges';
 import { QuestionBoard, QuestionTable, groupQuestions, type GroupBy, type Reviewer } from './question-views';
 import {
-  COMPLIANCE_ORDER,
   DEFAULT_DIRECTION,
   SORT_LABELS,
   filterQuestions,
@@ -31,6 +30,7 @@ const menuItem =
   'flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-soft [&_svg]:size-4';
 import { ErrorNote, Field, FilePicker, JobProgress, Upload, field, label, panel, useResource, type S } from './shared';
 import { Trace, SourcePane, type Source } from './trace';
+import { RatingSummary, SpecificationView } from './requirements';
 
 const statuses = ['not_started', 'ai_draft', 'writer_edited', 'sme_verified', 'approved'];
 const coverages = ['covered', 'partial', 'new', 'unknown'];
@@ -129,7 +129,6 @@ export function Tenders({ workspaceId }: { workspaceId: string }) {
             {t.questions_total ? (
               <div className="mt-3 flex flex-wrap gap-6">
                 <Progress done={t.questions_approved} total={t.questions_total} labelText="Questions approved" />
-                {t.words_total ? <Progress done={t.words_approved} total={t.words_total} labelText="Words approved" /> : null}
               </div>
             ) : (
               <p className="mt-3 text-xs text-amber">No questions yet. Open the tender to upload the question pack.</p>
@@ -301,7 +300,8 @@ export function NewTender({ workspaceId }: { workspaceId: string }) {
           <section className="space-y-2">
             <h2 className="text-sm font-semibold">Other buyer documents (optional)</h2>
             <p className="text-xs text-muted">
-              Specification, clarification log or contract terms. They are kept with the tender for reference and are not used to draft answers.
+              Specification, clarification log or contract terms. Ten reads them for specification requirements to rate Green, Amber or Red; they
+              are not used to draft answers.
             </p>
             {extras.map((extra) => (
               <div key={extra.key} className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
@@ -385,6 +385,7 @@ const VIEWS = [
   ['board', 'Board'],
   ['table', 'Table'],
   ['document', 'Document'],
+  ['specification', 'Specification'],
   ['documents', 'Buyer documents'],
   ['submission', 'Submission'],
 ] as const;
@@ -415,7 +416,6 @@ export function TenderWorkspace({
     [coverage, setCoverage] = useState(''),
     [search, setSearch] = useState(''),
     [section, setSection] = useState(''),
-    [compliance, setCompliance] = useState(''),
     [sort, setSort] = useState<QuestionSort>({ key: 'order', direction: 'asc' }),
     [owner, setOwner] = useState(''),
     [confirmSubmit, setConfirmSubmit] = useState(false),
@@ -454,11 +454,11 @@ export function TenderWorkspace({
       active = false;
     };
   }, [workspaceId, tenderId]);
-  const filters = { search, section, status, coverage, compliance, assignee: owner };
+  const filters = { search, section, status, coverage, assignee: owner };
   const filtered = hasFilters(filters);
   const rows = useMemo(
-    () => sortQuestions(filterQuestions(questions.data ?? [], { search, section, status, coverage, compliance, assignee: owner }), sort),
-    [questions.data, search, section, status, coverage, compliance, owner, sort],
+    () => sortQuestions(filterQuestions(questions.data ?? [], { search, section, status, coverage, assignee: owner }), sort),
+    [questions.data, search, section, status, coverage, owner, sort],
   );
   const sections = useMemo(() => sectionsOf(questions.data ?? []), [questions.data]);
   // The fetch is keyed on the visible ids and their current answer ids, so a filter keystroke
@@ -576,6 +576,10 @@ export function TenderWorkspace({
         ? 'Archived tenders cannot be submitted. Restore it first.'
         : null;
   const noQuestions = questions.data !== null && (questions.data ?? []).length === 0;
+  // Question cards exist. The specification, buyer documents and submission views do not wait for
+  // them: a buyer's specification is often uploaded before (or without) the question pack.
+  const questionsReady = hasPack && !noQuestions;
+  const questionView = ['board', 'table', 'document'].includes(view);
   // The latest run first: triage follows extraction.
   const activeJob = job ?? t?.triage_job_id ?? t?.extract_job_id;
   return (
@@ -651,39 +655,40 @@ export function TenderWorkspace({
           </Button>
         </div>
       ) : null}
-      {t && !hasPack ? (
-        <div className={`${panel} max-w-2xl space-y-3`}>
-          <h2 className="font-semibold">Upload the buyer’s question pack</h2>
-          <p className="text-sm text-muted">
-            Ten reads the pack, creates a card for every question and checks what your evidence library already covers. This usually takes
-            about a minute.
-          </p>
-          <Upload workspaceId={workspaceId} tenderId={tenderId} onUploaded={refresh} kinds={['question_pack']} />
-        </div>
-      ) : null}
-      {t && hasPack && noQuestions ? (
-        <div className={`${panel} max-w-2xl space-y-2`}>
-          <h2 className="font-semibold">Reading the question pack</h2>
-          <p className="text-sm text-muted">Question cards appear here as they are found.</p>
-          <JobProgress workspaceId={workspaceId} id={activeJob} onChange={refresh} />
-        </div>
-      ) : null}
-      {t && hasPack && !noQuestions ? (
+      {t ? (
         <>
-          <dl className="mb-4 grid grid-cols-2 gap-4 border-y border-line py-4 sm:grid-cols-4">
+          <dl className="mb-4 grid grid-cols-2 gap-4 border-y border-line py-4 sm:grid-cols-[auto_auto_minmax(0,1fr)]">
             {(
               [
                 ['Approved', `${t.questions_approved} / ${t.questions_total}`, 'neutral'],
                 ['Needs review', t.needs_review_count, t.needs_review_count ? 'red' : 'neutral'],
-                ['Class C (cannot comply)', t.c_count, t.c_count ? 'red' : 'neutral'],
-                ['Mandatory, not yet classified', t.unclassified_mandatory_count, t.unclassified_mandatory_count ? 'amber' : 'neutral'],
               ] as const
             ).map(([name, value, tone]) => (
-              <div key={name}>
+              <div key={name} className="sm:pr-6">
                 <dt className="text-xs text-muted">{name}</dt>
-                <dd className={`mt-1 text-2xl ${tone === 'red' ? 'text-red' : tone === 'amber' ? 'text-amber' : ''}`}>{value}</dd>
+                <dd className={`mt-1 text-2xl ${tone === 'red' ? 'text-red' : ''}`}>{value}</dd>
               </div>
             ))}
+            <div className="col-span-2 sm:col-span-1">
+              <dt className="text-xs text-muted">Specification RAG</dt>
+              <dd className="mt-1">
+                <button
+                  type="button"
+                  className="rounded-md text-left text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-accent"
+                  onClick={() => setView('specification')}
+                  aria-label={`Specification RAG: ${
+                    t.requirement_counts?.total
+                      ? `${t.requirement_counts.green} Green, ${t.requirement_counts.amber} Amber, ${t.requirement_counts.red} Red, ${t.requirement_counts.unrated} not rated`
+                      : 'no requirements yet'
+                  }. Open the specification.`}
+                >
+                  <RatingSummary
+                    className="min-h-8"
+                    counts={t.requirement_counts ?? { green: 0, amber: 0, red: 0, unrated: 0, total: 0 }}
+                  />
+                </button>
+              </dd>
+            </div>
           </dl>
           <JobProgress workspaceId={workspaceId} id={activeJob} onChange={refresh} />
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -700,16 +705,18 @@ export function TenderWorkspace({
                 </button>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" busy={busy} onClick={() => void act('retriage')} title="Re-check coverage for questions not yet started">
-                Re-check coverage
-              </Button>
-              <Button size="sm" busy={busy} onClick={() => void act('draft-all', { include_new: false })}>
-                Draft all covered questions
-              </Button>
-            </div>
+            {questionsReady && questionView ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" busy={busy} onClick={() => void act('retriage')} title="Re-check coverage for questions not yet started">
+                  Re-check coverage
+                </Button>
+                <Button size="sm" busy={busy} onClick={() => void act('draft-all', { include_new: false })}>
+                  Draft all covered questions
+                </Button>
+              </div>
+            ) : null}
           </div>
-          {['board', 'table', 'document'].includes(view) ? (
+          {questionsReady && questionView ? (
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <input
                 className={`${compact} w-56`}
@@ -750,15 +757,6 @@ export function TenderWorkspace({
                 {coverages.map((s) => (
                   <option key={s} value={s}>
                     {s === 'unknown' ? 'Pending' : label(s)}
-                  </option>
-                ))}
-              </select>
-              <select className={compact} aria-label="Compliance class filter" value={compliance} onChange={(e) => setCompliance(e.target.value)}>
-                <option value="">Any compliance class</option>
-                <option value="-">Not yet classified</option>
-                {COMPLIANCE_ORDER.map((c) => (
-                  <option key={c} value={c}>
-                    Class {c}
                   </option>
                 ))}
               </select>
@@ -813,7 +811,6 @@ export function TenderWorkspace({
                     setSection('');
                     setStatus('');
                     setCoverage('');
-                    setCompliance('');
                     setOwner('');
                   }}
                 >
@@ -835,7 +832,23 @@ export function TenderWorkspace({
           ) : null}
         </>
       ) : null}
-      {hasPack && !noQuestions && view === 'board' ? (
+      {t && questionView && !hasPack ? (
+        <div className={`${panel} max-w-2xl space-y-3`}>
+          <h2 className="font-semibold">Upload the buyer’s question pack</h2>
+          <p className="text-sm text-muted">
+            Ten reads the pack, creates a card for every question and checks what your evidence library already covers. This usually takes
+            about a minute.
+          </p>
+          <Upload workspaceId={workspaceId} tenderId={tenderId} onUploaded={refresh} kinds={['question_pack']} />
+        </div>
+      ) : null}
+      {t && questionView && hasPack && noQuestions ? (
+        <div className={`${panel} max-w-2xl space-y-2`}>
+          <h2 className="font-semibold">Reading the question pack</h2>
+          <p className="text-sm text-muted">Question cards appear here as they are found.</p>
+        </div>
+      ) : null}
+      {questionsReady && view === 'board' ? (
         <>
           {groupBy === 'status' || groupBy === 'owner' ? (
             <p className="mb-2 text-[11px] text-muted">
@@ -852,14 +865,14 @@ export function TenderWorkspace({
           />
         </>
       ) : null}
-      {hasPack && !noQuestions && view === 'table' ? (
+      {questionsReady && view === 'table' ? (
         rows.length ? (
           <QuestionTable workspaceId={workspaceId} rows={rows} sort={sort} onSort={(key) => setSort(nextSort(sort, key))} reviewersOf={reviewersOf} />
         ) : (
           <p className="text-sm text-muted">No questions match these filters.</p>
         )
       ) : null}
-      {hasPack && !noQuestions && view === 'document' ? (
+      {questionsReady && view === 'document' ? (
         <div className={`grid gap-4 ${source ? 'xl:grid-cols-2' : ''}`}>
           <div className="space-y-5">
             {rows.map((q) => {
@@ -890,7 +903,16 @@ export function TenderWorkspace({
           ) : null}
         </div>
       ) : null}
-      {hasPack && !noQuestions && view === 'documents' ? (
+      {t && view === 'specification' ? (
+        <SpecificationView
+          workspaceId={workspaceId}
+          tenderId={tenderId}
+          owners={owners}
+          onChanged={reloadTender}
+          onOpenDocuments={() => setView('documents')}
+        />
+      ) : null}
+      {t && view === 'documents' ? (
         <div className="space-y-4">
           <div className="space-y-2">
             {t?.documents?.map((d) => (
@@ -911,11 +933,12 @@ export function TenderWorkspace({
           </div>
           <div className={`${panel} space-y-2`}>
             <h2 className="text-sm font-semibold">Add a buyer document</h2>
+            <p className="text-xs text-muted">Ten reads every buyer document for specification requirements once it has been processed.</p>
             <Upload workspaceId={workspaceId} tenderId={tenderId} onUploaded={refresh} kinds={OTHER_KINDS} defaultKind="specification" />
           </div>
         </div>
       ) : null}
-      {hasPack && !noQuestions && view === 'submission' ? (
+      {t && view === 'submission' ? (
         <section className={`${panel} space-y-5`}>
           <div>
             <h2 className="font-semibold">Export answers</h2>

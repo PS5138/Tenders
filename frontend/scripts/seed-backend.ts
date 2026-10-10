@@ -24,6 +24,9 @@ const LIBRARY_FILES = [
 ];
 const TENDER_NAME = 'Northern Fells 2025 (synthetic)';
 const PACK_FILE = 'question_pack_northern_fells_2025.xlsx';
+// The buyer's specification beside the pack: once it is parsed, the worker scans the tender's
+// documents for specification requirements and suggests a RAG rating for each (Specification tab).
+const SPEC_FILE = 'specification_northern_fells_2025.docx';
 // One deadline for every wait in the run, not one per document (live providers are slow).
 const deadline = Date.now() + Number(process.env.SEED_WAIT_MS ?? 300_000);
 
@@ -102,12 +105,20 @@ async function seedTender(): Promise<void> {
       'application/json',
     ));
   const detail = await request<Schema['TenderDetail']>(`/tenders/${tender.id}`);
-  if ((detail.documents ?? []).some((d) => d.tender_doc_kind === 'question_pack')) {
+  const documents = detail.documents ?? [];
+  if (documents.some((d) => d.tender_doc_kind === 'question_pack')) {
     console.log(`Synthetic question pack already uploaded: ${TENDER_NAME}`);
-    return;
+  } else {
+    await request(`/tenders/${tender.id}/documents`, 'POST', await fileForm(PACK_FILE, { tender_doc_kind: 'question_pack' }));
+    console.log(`Synthetic question pack uploaded: ${TENDER_NAME}. The worker extracts and triages it.`);
   }
-  await request(`/tenders/${tender.id}/documents`, 'POST', await fileForm(PACK_FILE, { tender_doc_kind: 'question_pack' }));
-  console.log(`Synthetic question pack uploaded: ${TENDER_NAME}. The worker extracts and triages it.`);
+  // Added to tenders seeded before the specification existed too; a failed upload is retried.
+  if (documents.some((d) => d.tender_doc_kind === 'specification' && d.ingest_status !== 'failed')) {
+    console.log(`Synthetic specification already uploaded: ${TENDER_NAME}`);
+  } else {
+    await request(`/tenders/${tender.id}/documents`, 'POST', await fileForm(SPEC_FILE, { tender_doc_kind: 'specification' }));
+    console.log(`Synthetic specification uploaded: ${TENDER_NAME}. The worker scans it for requirements.`);
+  }
 }
 
 async function main() {

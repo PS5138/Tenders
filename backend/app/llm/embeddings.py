@@ -23,8 +23,17 @@ class EmbeddingError(RuntimeError):
     pass
 
 
+# Live providers cap a request by input count and by total tokens (OpenAI: 2,048 inputs and
+# about 300,000 tokens; Voyage: 1,000 inputs and 120,000 tokens for voyage-3), and each input by
+# its own token limit (8,191 for text-embedding-3-small). ``embed`` therefore sends batches of at
+# most ``batch_size`` texts and cuts each text to ``MAX_EMBED_CHARS`` (about 6,000 tokens). The
+# cut applies only to the string embedded; stored text is never shortened.
+MAX_EMBED_CHARS = 24_000
+
+
 class Embedder(Protocol):
     dimension: int
+    batch_size: int
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
 
@@ -34,6 +43,8 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 class FakeEmbedder:
     """Deterministic hash-based embeddings: unigrams weight 1.0, bigrams weight 0.5."""
+
+    batch_size = 10_000
 
     def __init__(self, dimension: int) -> None:
         self.dimension = dimension
@@ -65,6 +76,8 @@ class FakeEmbedder:
 
 
 class OpenAIEmbedder:
+    batch_size = 128
+
     def __init__(self, model: str, dimension: int, api_key: str | None) -> None:
         self.model = model
         self.dimension = dimension
@@ -90,6 +103,8 @@ class OpenAIEmbedder:
 
 
 class VoyageEmbedder:
+    batch_size = 64
+
     def __init__(self, model: str, dimension: int, api_key: str | None) -> None:
         self.model = model
         self.dimension = dimension
@@ -111,8 +126,24 @@ class VoyageEmbedder:
         return [list(vector) for vector in result.embeddings]
 
 
-@lru_cache(maxsize=1)
 def get_embedder() -> Embedder:
+    """The embedder for the current work: the fake one when the deployment or the current
+    organisation is synthetic (``app.llm.scope``), whose library it embedded, otherwise the one
+    ``EMBEDDING_PROVIDER`` names."""
+    from app.llm.scope import is_synthetic
+
+    if is_synthetic():
+        return _synthetic_embedder()
+    return _provider_embedder()
+
+
+@lru_cache(maxsize=1)
+def _synthetic_embedder() -> Embedder:
+    return FakeEmbedder(get_settings().embedding_dimension)
+
+
+@lru_cache(maxsize=1)
+def _provider_embedder() -> Embedder:
     settings = get_settings()
     dimension = settings.embedding_dimension
     if settings.embedding_provider == "fake":
@@ -125,12 +156,19 @@ def get_embedder() -> Embedder:
 
 
 def reset_embedder() -> None:
-    get_embedder.cache_clear()
+    _synthetic_embedder.cache_clear()
+    _provider_embedder.cache_clear()
 
 
 def embed(texts: Sequence[str]) -> list[list[float]]:
-    """Embed ``texts`` in one batched call. Every vector has ``EMBEDDING_DIMENSION`` entries."""
-    vectors = get_embedder().embed(list(texts))
+    """Embed ``texts`` in as few calls as the provider's limits allow, in order. Every vector
+    has ``EMBEDDING_DIMENSION`` entries."""
+    embedder = get_embedder()
+    inputs = [text[:MAX_EMBED_CHARS] for text in texts]
+    vectors: list[list[float]] = []
+    size = max(1, getattr(embedder, "batch_size", 128))
+    for start in range(0, len(inputs), size):
+        vectors.extend(embedder.embed(inputs[start : start + size]))
     expected = get_settings().embedding_dimension
     for vector in vectors:
         if len(vector) != expected:

@@ -8,8 +8,8 @@
 #
 # One Ctrl-C stops everything this script started. The first run installs what is missing (the
 # Python virtualenv, node_modules, the Auth binary) and takes a few minutes; later runs take
-# seconds. Fake providers and SYNTHETIC_DEMO=true by default, as in dev_up.sh; export
-# LLM_PROVIDER, EMBEDDING_PROVIDER, SYNTHETIC_DEMO and the keys before running to use live models.
+# seconds. AI providers come from the repo-root .env (see dev_up.sh): with both keys filled in,
+# Live workspace runs on Anthropic and OpenAI; the fictional businesses always stay synthetic.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -76,6 +76,12 @@ else
   api_healthy || { tail -20 "$LOGS/dev-api.log" >&2; fail "The backend did not become healthy within two minutes."; }
 fi
 
+if curl -sf -m 2 http://127.0.0.1:8000/health | grep -q '"synthetic_demo":false'; then
+  AI_LINE="Live workspace: live AI (Anthropic and OpenAI). Example Health stays synthetic."
+else
+  AI_LINE="AI: synthetic only. Add ANTHROPIC_API_KEY and OPENAI_API_KEY to .env and restart for live AI."
+fi
+
 # --- 2 and 3. Frontend services, migrations, accounts, seed --------------------------------------
 cd frontend
 say "Starting the frontend database and login service"
@@ -90,11 +96,15 @@ pnpm_ --silent db:seed-backend >"$LOGS/dev-seed.log" 2>&1 &
 SEED_PID=$!
 
 # --- 4. The app ---------------------------------------------------------------------------------
-cat <<'EOF'
+cat <<EOF
 
   Ten is starting on  http://localhost:3000
   Sign in as          puru@example-health.test   password: ten-dev-only
   (other accounts are listed in README.md)
+
+  $AI_LINE
+  Switch business from the business menu in the top bar: Example Health (synthetic sample)
+  or Live workspace (your own documents and tenders).
 
   Logs: storage/dev-api.log (API), storage/dev-worker.log (worker), storage/dev-seed.log (seed)
   Press Ctrl-C once to stop everything.

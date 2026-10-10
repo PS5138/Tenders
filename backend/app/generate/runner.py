@@ -34,6 +34,7 @@ from app.db.models import Message, Question, Thread
 from app.db.session import new_session
 from app.generate import pipeline
 from app.generate.errors import Conflict409, DraftError, NotFound, error_detail
+from app.llm.scope import run_in_context
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,8 @@ def _launch(key: str, work: Callable[[Session, pipeline.Emit], dict[str, Any]]) 
 
     async def task() -> None:
         try:
-            await loop.run_in_executor(None, _run_sync, work, emit)
+            # The executor thread does not inherit the request's organisation scope.
+            await loop.run_in_executor(None, run_in_context(_run_sync), work, emit)
         except Exception:  # noqa: BLE001
             logger.exception("draft task failed outside the pipeline")
             run.queue.put_nowait(

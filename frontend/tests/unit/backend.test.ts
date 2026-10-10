@@ -82,6 +82,26 @@ describe("private backend boundary", () => {
     ).toBe(true);
   });
 
+  it("allows the specification requirements routes, UUID-anchored, with their methods only", () => {
+    const none = new URLSearchParams();
+    expect(allowedBackendRequest("GET", `/tenders/${id}/requirements`, none, false)).toBe(true);
+    expect(allowedBackendRequest("POST", `/tenders/${id}/requirements/rescan`, none, false)).toBe(true);
+    expect(allowedBackendRequest("PATCH", `/requirements/${id}`, none, false)).toBe(true);
+    for (const [method, path] of [
+      ["POST", `/tenders/${id}/requirements`],
+      ["GET", `/tenders/${id}/requirements/rescan`],
+      ["DELETE", `/requirements/${id}`],
+      ["GET", `/requirements/${id}`],
+      ["PATCH", "/requirements/not-a-uuid"],
+      ["PATCH", `/requirements/${id}/extra`],
+      ["GET", "/tenders/not-a-uuid/requirements"],
+    ])
+      expect(allowedBackendRequest(method, path, none, true)).toBe(false);
+    expect(
+      allowedBackendRequest("GET", `/tenders/${id}/requirements`, new URLSearchParams("rag=red"), true),
+    ).toBe(false);
+  });
+
   it("refuses supplied identity and requires the exact configured origin on writes", () => {
     for (const name of [
       "X-Actor",

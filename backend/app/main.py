@@ -21,11 +21,12 @@ from app.api import (
     library,
     organisations,
     questions,
+    requirements,
     sections,
     tenders,
     threads,
 )
-from app.api.deps import ACTOR_HEADER, ORG_HEADER, actor_guard
+from app.api.deps import ACTOR_HEADER, ORG_HEADER, actor_guard, org_scope_guard
 from app.api.documents import TOO_LARGE, upload_limit_message
 from app.api.schemas import HealthResponse
 from app.config import check_provider_configuration, get_settings
@@ -36,6 +37,7 @@ ROUTERS = (
     sections.router,
     library.router,
     tenders.router,
+    requirements.router,
     jobs.router,
     drafts.router,
     questions.router,
@@ -176,7 +178,7 @@ def create_app() -> FastAPI:
         description="Tender-response backend. Service-authenticated: the Next.js server sets "
         "X-Actor and X-Org-Id on every request and the browser never calls this API directly. "
         "Without a proxy (tests, the harness, curl) X-Org-Id defaults to the seeded organisation.",
-        dependencies=[Depends(actor_guard)],
+        dependencies=[Depends(actor_guard), Depends(org_scope_guard)],
     )
 
     # Added first, so it is the innermost middleware: inside the service-secret guard and

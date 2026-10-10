@@ -410,6 +410,120 @@
         "question_count": 43,
         "buyer": "Northern Fells Community Health NHS Trust"
       }
+    },
+    {
+      "filename": "specification_northern_fells_2025.docx",
+      "role": "specification",
+      "expected": {
+        "doc_type": "tender_document",
+        "tender_doc_kind": "specification",
+        "buyer": "Northern Fells Community Health NHS Trust",
+        "requirement_count": 17
+      },
+      "requirements": [
+        {
+          "ref": "2.1",
+          "priority": "must",
+          "text": "The supplier must operate a clinical risk management system that meets the requirements of DCB0129 and maintain a clinical safety case for the solution.",
+          "expected": "covered"
+        },
+        {
+          "ref": "2.2",
+          "priority": "must",
+          "text": "The supplier must name a Clinical Safety Officer who is a registered clinician and who approves every release before deployment.",
+          "expected": "covered"
+        },
+        {
+          "ref": "2.3",
+          "priority": "should",
+          "text": "The supplier should support the Trust in discharging its own duties under DCB0160, including joint hazard workshops for local configuration and a clinical safety impact statement with every release.",
+          "expected": "partial"
+        },
+        {
+          "ref": "3.1",
+          "priority": "must",
+          "text": "The supplier must hold current ISO/IEC 27001 certification covering the information security management system for the solution.",
+          "expected": "covered"
+        },
+        {
+          "ref": "3.2",
+          "priority": "must",
+          "text": "The supplier must hold Cyber Essentials Plus certification covering the whole organisation and renew it annually.",
+          "expected": "covered"
+        },
+        {
+          "ref": "3.3",
+          "priority": "must",
+          "text": "The supplier must have achieved Standards Met in its most recent Data Security and Protection Toolkit assessment.",
+          "expected": "covered"
+        },
+        {
+          "ref": "3.4",
+          "priority": "must",
+          "text": "All personal data shall be hosted in United Kingdom public cloud regions and no personal data shall be transferred outside the United Kingdom.",
+          "expected": "covered"
+        },
+        {
+          "ref": "3.5",
+          "priority": "should",
+          "text": "The supplier should commission an independent penetration test of the solution at least once a year and share a summary of the findings with the Trust.",
+          "expected": "partial"
+        },
+        {
+          "ref": "4.1",
+          "priority": "must",
+          "text": "The solution must expose and consume HL7 FHIR R4 resources profiled to UK Core and integrate with the Personal Demographics Service, including real-time event notifications to the Trust's integration engine.",
+          "expected": "partial"
+        },
+        {
+          "ref": "4.2",
+          "priority": "must",
+          "text": "Coded clinical entries must use the SNOMED CT UK Edition, with every national terminology update applied within seven days.",
+          "expected": "partial"
+        },
+        {
+          "ref": "4.3",
+          "priority": "should",
+          "text": "The solution should provide a single sign-on option using NHS Care Identity Service 2.",
+          "expected": "none"
+        },
+        {
+          "ref": "4.4",
+          "priority": "could",
+          "text": "The solution could offer a patient-facing mobile application for appointment booking.",
+          "expected": "none"
+        },
+        {
+          "ref": "5.1",
+          "priority": "must",
+          "text": "The supplier must provide a service desk available twenty-four hours a day, every day, by telephone, email and a customer portal.",
+          "expected": "covered"
+        },
+        {
+          "ref": "5.2",
+          "priority": "should",
+          "text": "Role-based e-learning should be available to all staff before go-live, with classroom training for every clinical user.",
+          "expected": "partial"
+        },
+        {
+          "ref": "5.3",
+          "priority": "must",
+          "text": "The solution must meet the Web Content Accessibility Guidelines 2.2 at level AA.",
+          "expected": "none"
+        },
+        {
+          "ref": "6.1",
+          "priority": "must",
+          "text": "The supplier must have published a Carbon Reduction Plan in the format required by Procurement Policy Note 06/21, with a commitment to net zero.",
+          "expected": "covered"
+        },
+        {
+          "ref": "6.2",
+          "priority": "should",
+          "text": "The supplier should fund at least five apprenticeships for young people from the Trust's area in every contract year.",
+          "expected": "partial"
+        }
+      ]
     }
   ],
   "ground_truth": "ground_truth.json"

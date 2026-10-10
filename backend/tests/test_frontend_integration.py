@@ -23,7 +23,7 @@ async def test_provision_is_idempotent_and_initialises_taxonomy(app_client):
     first = await app_client.post("/organisations", json=body)
     second = await app_client.post("/organisations", json=body)
     assert first.status_code == second.status_code == 200
-    assert first.json() == second.json() == body
+    assert first.json() == second.json() == {**body, "synthetic": False}
     assert (await app_client.get("/tenders", headers={"X-Org-Id": body["id"]})).json() == []
     conflict = await app_client.post("/organisations", json={**body, "name": "Different"})
     assert conflict.status_code == 409

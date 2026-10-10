@@ -91,6 +91,11 @@ class _Rows:
         return self.documents[document_id]
 
 
+# Public name for callers outside this module that locate sources themselves (the requirement
+# suggestion in ``app.retrieve.requirements`` verifies its evidence quotes the same way).
+SourceRows = _Rows
+
+
 def _as_uuid(value: Any) -> uuid.UUID | None:
     if isinstance(value, uuid.UUID):
         return value
@@ -411,8 +416,10 @@ __all__ = [
     "ENTAILMENT_PROMPT",
     "EntailmentResult",
     "EntailmentVerdict",
+    "SourceRows",
     "fact_checklist_status",
     "fact_is_current",
+    "locate_source",
     "source_record",
     "verify_fact_checklist",
     "verify_segments",

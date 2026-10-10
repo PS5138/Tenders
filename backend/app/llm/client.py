@@ -7,12 +7,22 @@ Anthropic SDK 1.x: ``client.messages.parse(..., output_format=Model).parsed_outp
 structured output and ``client.messages.stream(...).text_stream`` for streaming. No
 ``thinking`` parameters are set: claude-opus-5 and claude-sonnet-5 run adaptive thinking by
 default.
+
+Refusals. A safety classifier can decline a request with HTTP 200 and ``stop_reason:
+"refusal"``. For the models that support it, calls go through the beta namespace with
+server-side ``fallbacks: "default"``, so a declined request is re-run on Anthropic's
+recommended fallback model within the same call: a non-streaming call returns only the fallback
+model's output, and a stream continues from where the declined model stopped. A refusal that
+survives the fallback (or one on a model without fallbacks) raises ``LLMError``; the partial
+output of a declined stream is never treated as complete, and the pipeline persists nothing.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Protocol, TypeVar
@@ -22,6 +32,15 @@ from pydantic import BaseModel, ValidationError
 from app.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger(__name__)
+
+# Server-side refusal fallback, "default" form: Anthropic routes a declined request to its
+# recommended fallback for the refusal category. Only these models accept it.
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+FALLBACK_MODELS: frozenset[str] = frozenset(
+    {"claude-opus-5", "claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"}
+)
 
 # Optional prior turns, ``[{"role": "user" | "assistant", "content": "..."}]``, placed before
 # the current ``user`` message so synthesis can see thread history.
@@ -61,12 +80,37 @@ def _messages(user: str, history: History | None) -> list[dict[str, str]]:
     return [*(history or []), {"role": "user", "content": user}]
 
 
+def _refusal_error(name: str, message: Any) -> LLMError:
+    details = getattr(message, "stop_details", None)
+    category = getattr(details, "category", None) if details is not None else None
+    return LLMError(
+        f"{name}: the model declined this request"
+        + (f" (safety category: {category})" if category else "")
+        + ". Nothing was saved; rephrase the instruction or try again."
+    )
+
+
 class AnthropicLLM:
     """Real calls through the Anthropic SDK. The client is created lazily."""
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, *, refusal_fallbacks: bool = True) -> None:
         self._api_key = api_key
         self._client: Any = None
+        self._fallbacks = refusal_fallbacks
+
+    def _uses_fallbacks(self, model: str) -> bool:
+        return self._fallbacks and model in FALLBACK_MODELS
+
+    def _fallback_unsupported(self, exc: Exception) -> bool:
+        """A 400 that names the fallback parameter: turn fallbacks off for this process and let
+        the caller retry plainly, rather than fail every call."""
+        import anthropic
+
+        if isinstance(exc, anthropic.BadRequestError) and "fallback" in str(exc).lower():
+            logger.warning("refusal fallbacks rejected by the API; continuing without: %s", exc)
+            self._fallbacks = False
+            return True
+        return False
 
     @property
     def client(self) -> Any:
@@ -88,13 +132,26 @@ class AnthropicLLM:
         max_tokens: int = 16000,
         history: History | None = None,
     ) -> T:
-        message = self.client.messages.parse(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=_messages(user, history),
-            output_format=output_model,
-        )
+        request: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": _messages(user, history),
+            "output_format": output_model,
+        }
+        if self._uses_fallbacks(model):
+            try:
+                message = self.client.beta.messages.parse(
+                    **request, betas=[FALLBACK_BETA], fallbacks="default"
+                )
+            except Exception as exc:
+                if not self._fallback_unsupported(exc):
+                    raise
+                message = self.client.messages.parse(**request)
+        else:
+            message = self.client.messages.parse(**request)
+        if message.stop_reason == "refusal":
+            raise _refusal_error(name, message)
         parsed = message.parsed_output
         if parsed is None:
             raise LLMError(
@@ -102,6 +159,20 @@ class AnthropicLLM:
                 f"(stop_reason={message.stop_reason})"
             )
         return parsed
+
+    def _open_stream(self, stack: ExitStack, request: dict[str, Any], model: str) -> Any:
+        """Open the stream (the request is sent on entry), with fallbacks where supported."""
+        if self._uses_fallbacks(model):
+            try:
+                return stack.enter_context(
+                    self.client.beta.messages.stream(
+                        **request, betas=[FALLBACK_BETA], fallbacks="default"
+                    )
+                )
+            except Exception as exc:
+                if not self._fallback_unsupported(exc):
+                    raise
+        return stack.enter_context(self.client.messages.stream(**request))
 
     def stream_text(
         self,
@@ -113,13 +184,19 @@ class AnthropicLLM:
         max_tokens: int = 64000,
         history: History | None = None,
     ) -> Iterator[str]:
-        with self.client.messages.stream(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=_messages(user, history),
-        ) as stream:
+        request: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": _messages(user, history),
+        }
+        with ExitStack() as stack:
+            stream = self._open_stream(stack, request, model)
             yield from stream.text_stream
+            final = stream.get_final_message()
+        if final.stop_reason == "refusal":
+            # The partial output already streamed is discarded by the pipeline on this error.
+            raise _refusal_error(name, final)
 
 
 @dataclass
@@ -238,20 +315,36 @@ class FakeLLM:
 ProviderFactory = Callable[[], LLMClient]
 
 
-@lru_cache(maxsize=1)
 def get_llm() -> LLMClient:
-    """The process-wide client, chosen by ``LLM_PROVIDER``. ``reset_llm()`` rebuilds it."""
+    """The client for the current work: the synthetic stand-in when the deployment or the
+    current organisation is synthetic (``app.llm.scope``), otherwise the one ``LLM_PROVIDER``
+    names. Both are built once per process; ``reset_llm()`` rebuilds them."""
+    from app.llm.scope import is_synthetic
+
+    if is_synthetic():
+        return _synthetic_llm()
+    return _provider_llm()
+
+
+@lru_cache(maxsize=1)
+def _synthetic_llm() -> LLMClient:
+    from app.llm.synthetic import HeuristicFakeLLM
+
+    return HeuristicFakeLLM()
+
+
+@lru_cache(maxsize=1)
+def _provider_llm() -> LLMClient:
     settings = get_settings()
     if settings.llm_provider == "fake":
-        if settings.synthetic_demo:
-            from app.llm.synthetic import HeuristicFakeLLM
-
-            return HeuristicFakeLLM()
         return FakeLLM()
     if settings.llm_provider == "anthropic":
-        return AnthropicLLM(api_key=settings.anthropic_api_key)
+        return AnthropicLLM(
+            api_key=settings.anthropic_api_key, refusal_fallbacks=settings.refusal_fallbacks
+        )
     raise LLMError(f"unknown LLM_PROVIDER {settings.llm_provider!r}")
 
 
 def reset_llm() -> None:
-    get_llm.cache_clear()
+    _synthetic_llm.cache_clear()
+    _provider_llm.cache_clear()

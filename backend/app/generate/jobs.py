@@ -26,6 +26,7 @@ from app.db.session import new_session
 from app.generate import pipeline
 from app.generate.errors import Conflict409, format_error
 from app.jobs import register, set_progress
+from app.llm.scope import run_in_context
 from app.review.events import SYSTEM_ACTOR
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,8 @@ def run_draft_all(
             own.close()
 
     with ThreadPoolExecutor(max_workers=limit, thread_name_prefix="draft-all") as pool:
-        for result in pool.map(in_own_session, ids):
+        # Pool threads do not inherit the job's organisation scope (``app.llm.scope``).
+        for result in pool.map(run_in_context(in_own_session), ids):
             done += 1
             set_progress(session, job, done=done, result=result)
 

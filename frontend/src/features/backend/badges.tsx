@@ -22,12 +22,3 @@ export function CoverageBadge({ coverage }: { coverage: string }) {
     </Badge>
   );
 }
-
-export function ClassBadge({ value }: { value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <Badge tone={value === 'C' ? 'red' : value === 'B' ? 'amber' : 'green'} title="Compliance class">
-      Class {value}
-    </Badge>
-  );
-}

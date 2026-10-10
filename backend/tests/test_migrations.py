@@ -17,7 +17,7 @@ from app.db.models import Event
 from app.review.events import record_event
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "0002"
+HEAD_REVISION = "0004"
 NEW_EVENT_TYPES = ("tender_submitted", "outcome_set", "supersession_reversed")
 
 

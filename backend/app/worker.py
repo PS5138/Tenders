@@ -27,6 +27,7 @@ from app.jobs import (
     registered_kinds,
     requeue_stale_on_startup,
 )
+from app.llm.scope import org_scope, synthetic_for_org
 from app.review.invalidation import run_expiry_sweep
 
 logger = logging.getLogger("tenders.worker")
@@ -37,6 +38,7 @@ HANDLER_MODULES: tuple[str, ...] = (
     "app.ingest.questions",  # extract_questions
     "app.retrieve.triage",  # triage_tender
     "app.generate.jobs",  # draft_all
+    "app.ingest.requirements",  # extract_requirements
 )
 
 
@@ -66,8 +68,11 @@ def run_job(session: Session, job: Job) -> None:
     # except block would itself raise ``PendingRollbackError`` and strand the job at
     # ``running``. Plain values are safe to log; the ORM row is touched only after rollback.
     job_id, kind, attempts = job.id, job.kind, job.attempts
+    # The job runs on the providers its organisation calls for (``app.llm.scope``).
+    synthetic = synthetic_for_org(session, job.org_id)
     try:
-        handler(session, job)
+        with org_scope(synthetic):
+            handler(session, job)
     except Exception as exc:  # noqa: BLE001 - the loop must survive any handler failure
         logger.exception("job %s (%s) attempt %d raised", job_id, kind, attempts)
         session.rollback()

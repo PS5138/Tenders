@@ -57,6 +57,13 @@ from eval.synthetic.documents import (  # noqa: E402
 )
 from eval.synthetic.ground_truth import build_ground_truth  # noqa: E402
 from eval.synthetic.prose import render_answer, word_count  # noqa: E402
+from eval.synthetic.specification import (  # noqa: E402
+    SPECIFICATION_FILENAME,
+    write_specification_docx,
+)
+from eval.synthetic.specification import (  # noqa: E402
+    manifest_entry as specification_manifest_entry,
+)
 
 MODE_TEMPLATE = "template"
 MODE_CLAUDE = "claude"
@@ -284,6 +291,9 @@ def generate(out_dir: Path | str, seed: int = 0, *, mode: str | None = None) -> 
             },
         }
     )
+
+    write_specification_docx(out_path / SPECIFICATION_FILENAME)
+    manifest_documents.append(specification_manifest_entry(submissions[HELD_OUT_KEY].buyer))
 
     ground_truth = build_ground_truth(
         pack_rows=rows,

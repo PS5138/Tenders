@@ -8,7 +8,6 @@ export type TableQuestion = {
   order_index: number;
   status: string;
   coverage: string;
-  compliance_class?: string | null;
   assignee?: string | null;
   weighting?: number | null;
   word_limit?: number | null;
@@ -17,19 +16,20 @@ export type TableQuestion = {
 
 export const STATUS_ORDER = ['not_started', 'ai_draft', 'writer_edited', 'sme_verified', 'approved'] as const;
 export const COVERAGE_ORDER = ['covered', 'partial', 'new', 'unknown'] as const;
-export const COMPLIANCE_ORDER = ['A', 'B', 'C'] as const;
 
-/** Filter values. `''` means any; `'-'` means none (no owner, not yet classified); status `'unapproved'` is every status but approved. */
+// Compliance class (Green, Amber, Red) belongs to the specification requirements, not to the
+// questions: see `@/lib/requirements`. Questions keep coverage.
+
+/** Filter values. `''` means any; `'-'` means none (no owner); status `'unapproved'` is every status but approved. */
 export type QuestionFilters = {
   search: string;
   section: string;
   status: string;
   coverage: string;
-  compliance: string;
   assignee: string;
 };
 
-export const NO_FILTERS: QuestionFilters = { search: '', section: '', status: '', coverage: '', compliance: '', assignee: '' };
+export const NO_FILTERS: QuestionFilters = { search: '', section: '', status: '', coverage: '', assignee: '' };
 
 export function hasFilters(filters: QuestionFilters): boolean {
   return Object.values(filters).some(Boolean);
@@ -42,13 +42,12 @@ export function filterQuestions<T extends TableQuestion>(rows: readonly T[], fil
       (!filters.section || q.section === filters.section) &&
       (!filters.status || (filters.status === 'unapproved' ? q.status !== 'approved' : q.status === filters.status)) &&
       (!filters.coverage || q.coverage === filters.coverage) &&
-      (!filters.compliance || (filters.compliance === '-' ? !q.compliance_class : q.compliance_class === filters.compliance)) &&
       (!filters.assignee || (filters.assignee === '-' ? !q.assignee : q.assignee === filters.assignee)) &&
-      (!search || `${q.section} ${q.number} ${q.text} ${q.assignee ?? ''} ${q.compliance_class ?? ''}`.toLowerCase().includes(search)),
+      (!search || `${q.section} ${q.number} ${q.text} ${q.assignee ?? ''}`.toLowerCase().includes(search)),
   );
 }
 
-export type SortKey = 'order' | 'weighting' | 'coverage' | 'compliance' | 'assignee' | 'status' | 'support' | 'words';
+export type SortKey = 'order' | 'weighting' | 'coverage' | 'assignee' | 'status' | 'support' | 'words';
 export type SortDirection = 'asc' | 'desc';
 export type QuestionSort = { key: SortKey; direction: SortDirection };
 
@@ -56,7 +55,6 @@ export const SORT_LABELS: Record<SortKey, string> = {
   order: 'Buyer’s order',
   weighting: 'Weighting',
   coverage: 'Coverage',
-  compliance: 'Compliance class',
   assignee: 'Owner',
   status: 'Status',
   support: 'Evidence coverage',
@@ -68,7 +66,6 @@ export const DEFAULT_DIRECTION: Record<SortKey, SortDirection> = {
   order: 'asc',
   weighting: 'desc',
   coverage: 'asc',
-  compliance: 'asc',
   assignee: 'asc',
   status: 'asc',
   support: 'asc',
@@ -100,8 +97,6 @@ function sortValue(q: TableQuestion, key: SortKey): number | string | null {
       return q.weighting ?? null;
     case 'coverage':
       return rank(COVERAGE_ORDER, q.coverage);
-    case 'compliance':
-      return rank(COMPLIANCE_ORDER, q.compliance_class);
     case 'assignee':
       return q.assignee ? q.assignee.toLowerCase() : null;
     case 'status':

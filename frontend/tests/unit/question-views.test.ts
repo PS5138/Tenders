@@ -25,7 +25,6 @@ const q = (over: Partial<TableQuestion> & { id: string }): TableQuestion & { id:
   order_index: 0,
   status: 'not_started',
   coverage: 'unknown',
-  compliance_class: null,
   assignee: null,
   weighting: null,
   word_limit: null,
@@ -35,10 +34,10 @@ const q = (over: Partial<TableQuestion> & { id: string }): TableQuestion & { id:
 const answer = (word_count: number, score: number | null) => ({ word_count, support_summary: { score } });
 
 const rows = [
-  q({ id: 'a', order_index: 0, number: '1.1', status: 'approved', coverage: 'covered', compliance_class: 'A', assignee: 'Sam', weighting: 5, word_limit: 200, current_answer: answer(150, 0.9) }),
-  q({ id: 'b', order_index: 1, number: '1.2', status: 'ai_draft', coverage: 'partial', compliance_class: 'C', weighting: 15, word_limit: 100, current_answer: answer(120, 0.5) }),
+  q({ id: 'a', order_index: 0, number: '1.1', status: 'approved', coverage: 'covered', assignee: 'Sam', weighting: 5, word_limit: 200, current_answer: answer(150, 0.9) }),
+  q({ id: 'b', order_index: 1, number: '1.2', status: 'ai_draft', coverage: 'partial', weighting: 15, word_limit: 100, current_answer: answer(120, 0.5) }),
   q({ id: 'c', order_index: 2, number: '2.1', section: 'Information governance', status: 'not_started', coverage: 'new', assignee: 'alex', word_limit: 300 }),
-  q({ id: 'd', order_index: 3, number: '2.2', section: 'Information governance', status: 'writer_edited', coverage: 'covered', compliance_class: 'B', assignee: 'Jordan', weighting: 10, current_answer: answer(80, 1) }),
+  q({ id: 'd', order_index: 3, number: '2.2', section: 'Information governance', status: 'writer_edited', coverage: 'covered', assignee: 'Jordan', weighting: 10, current_answer: answer(80, 1) }),
 ];
 const ids = (list: { id: string }[]) => list.map((r) => r.id);
 
@@ -54,11 +53,9 @@ describe('filtering the question table', () => {
     expect(hasFilters(filters)).toBe(true);
   });
 
-  it('filters by section, coverage, compliance class and owner, with "-" meaning none', () => {
+  it('filters by section, coverage and owner, with "-" meaning none', () => {
     expect(ids(filterQuestions(rows, { ...NO_FILTERS, section: 'Information governance' }))).toEqual(['c', 'd']);
     expect(ids(filterQuestions(rows, { ...NO_FILTERS, coverage: 'covered' }))).toEqual(['a', 'd']);
-    expect(ids(filterQuestions(rows, { ...NO_FILTERS, compliance: 'C' }))).toEqual(['b']);
-    expect(ids(filterQuestions(rows, { ...NO_FILTERS, compliance: '-' }))).toEqual(['c']);
     expect(ids(filterQuestions(rows, { ...NO_FILTERS, assignee: '-' }))).toEqual(['b']);
     expect(ids(filterQuestions(rows, { ...NO_FILTERS, assignee: 'Sam', status: 'unapproved' }))).toEqual([]);
   });
@@ -80,9 +77,8 @@ describe('sorting the question table', () => {
     expect(ids(sortQuestions(rows, { key: 'weighting', direction: 'asc' }))).toEqual(['a', 'd', 'b', 'c']);
   });
 
-  it('sorts coverage, compliance class and status in their own order, not alphabetically', () => {
+  it('sorts coverage and status in their own order, not alphabetically', () => {
     expect(ids(sortQuestions(rows, { key: 'coverage', direction: 'asc' }))).toEqual(['a', 'd', 'b', 'c']);
-    expect(ids(sortQuestions(rows, { key: 'compliance', direction: 'asc' }))).toEqual(['a', 'd', 'b', 'c']);
     expect(ids(sortQuestions(rows, { key: 'status', direction: 'desc' }))).toEqual(['a', 'd', 'b', 'c']);
   });
 

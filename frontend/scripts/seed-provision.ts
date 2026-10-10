@@ -7,9 +7,10 @@ import { closeDb } from '../src/server/db';
 import { seedPeopleAndWorkspaces } from './seed-users';
 
 async function main() {
-  const { exampleHealth, riverside } = await seedPeopleAndWorkspaces();
+  const { exampleHealth, riverside, live } = await seedPeopleAndWorkspaces();
   console.log(`Development accounts ready. Example Health business: ${exampleHealth}. Riverside Medical business: ${riverside}.`);
-  console.log('Both synthetic businesses have separate backend organisations.');
+  console.log(`Live workspace (real AI, your own documents): ${live}.`);
+  console.log('Each business has its own backend organisation and library.');
 }
 main()
   .catch((error) => {

@@ -205,6 +205,9 @@ class Settings(BaseSettings):
     embedding_model_openai: str = "text-embedding-3-small"
     embedding_model_voyage: str = "voyage-3"
     embedding_dimension: int = 1536
+    # Server-side refusal fallback (``fallbacks: "default"``) on the models that accept it; see
+    # ``app.llm.client``. On by default; REFUSAL_FALLBACKS=false turns it off.
+    refusal_fallbacks: bool = True
 
     # Thresholds
     dedup_threshold: float = 0.90
@@ -220,6 +223,11 @@ class Settings(BaseSettings):
     candidates_per_list: int = 20
     top_k_synthesis: int = 8
     coverage_judgement_top: int = 3
+    # Candidates and facts shown to the requirement judgement (``app.retrieve.requirements``).
+    # The suggestion reuses ``coverage_floor`` as its cost gate and ``triage_concurrency`` as
+    # its pool size.
+    requirement_judgement_top: int = 5
+    requirement_judgement_facts: int = 8
     triage_concurrency: int = 15
     draft_all_concurrency: int = 4
 

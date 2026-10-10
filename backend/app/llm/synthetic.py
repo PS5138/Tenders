@@ -7,7 +7,9 @@ generator writes, and word-overlap scores. It parses exactly what each pipeline 
 the section labels of ``app.ingest.extract.build_window_prompt``, the chunk labels of
 ``app.ingest.chunk.build_annotation_prompt``, the sample of ``app.ingest.classify``, the row
 labels of ``app.ingest.questions.extract_batch``, ``app.retrieve.coverage.build_judgement_input``,
-the JSON items of ``app.generate.verification._entailment``, the rewrite request of
+the JSON items of ``app.generate.verification._entailment``, the windows of
+``app.ingest.requirements.build_window_prompt``, the requirement message of
+``app.retrieve.requirements.build_judgement_input``, the rewrite request of
 ``app.generate.pipeline.rewrite_query`` and the synthesis message of
 ``app.generate.pipeline.build_synthesis_user_message``.
 
@@ -784,6 +786,133 @@ def entailment(user: str, history: History | None) -> dict[str, Any]:
     return {"verdicts": verdicts}
 
 
+_REQUIREMENT_WORD_RE = re.compile(r"\b(must|shall|should|could|required)\b", re.IGNORECASE)
+_LEADING_REF_RE = re.compile(r"^((?:[A-Z]{1,4}[- ]?)?\d+(?:\.\d+)*)[.):]?\s+")
+_REF_CELL_RE = re.compile(r"^(?:[A-Z]{1,4}[- ]?)?\d+(?:\.\d+)*$")
+_PRIORITY_WORDS: dict[str, str] = {
+    "must": "must", "shall": "must", "required": "must", "mandatory": "must",
+    "essential": "must", "m": "must",
+    "should": "should", "desirable": "should", "s": "should",
+    "could": "could", "optional": "could", "c": "could",
+}
+
+
+def _requirement_entry(
+    section: LabelledSection, ref: str | None, text: str, priority: str, taxonomy: list[str]
+) -> dict[str, Any]:
+    return {
+        "section_id": section.id,
+        "ref": ref,
+        "text": text,
+        "priority": priority,
+        "topics": topics_for(text, taxonomy) if taxonomy else [],
+    }
+
+
+def _table_row_requirement(
+    section: LabelledSection, taxonomy: list[str]
+) -> dict[str, Any] | None:
+    """One requirement per table row: the reference from a cell that is only a reference, the
+    priority from a cell that is only a priority word, and the text from the cell that states
+    the obligation. A header row ("Ref | Requirement | Priority") states none and is skipped."""
+    cells = [cell.strip() for cell in section.text.split(" | ")]
+    ref = next((cell for cell in cells if _REF_CELL_RE.match(cell)), None)
+    priority_cell = next((cell for cell in cells if cell.lower() in _PRIORITY_WORDS), None)
+    text = next(
+        (
+            cell
+            for cell in cells
+            if cell is not priority_cell and _REQUIREMENT_WORD_RE.search(cell)
+            and not cell.endswith("?")
+        ),
+        None,
+    )
+    if text is None:
+        return None
+    if priority_cell is not None:
+        priority = _PRIORITY_WORDS[priority_cell.lower()]
+    else:
+        priority = _PRIORITY_WORDS[_REQUIREMENT_WORD_RE.search(text).group(1).lower()]
+    return _requirement_entry(section, ref, text, priority, taxonomy)
+
+
+def extract_requirements(user: str, history: History | None) -> dict[str, Any]:
+    """Specification requirements in the labelled sections: one per table row that states an
+    obligation (must, shall, should, could or required), and in prose one per such sentence,
+    with its leading number as the reference. Question-pack rows (a header row with a Question
+    column) are skipped: their questions are cards, not requirements."""
+    taxonomy = parse_taxonomy(user)
+    requirements: list[dict[str, Any]] = []
+    for section in _labelled_sections(user, _PAIR_SECTION_RE):
+        if "question" in [part.strip().lower() for part in section.heading_path]:
+            continue
+        if section.row is not None:
+            entry = _table_row_requirement(section, taxonomy)
+            if entry is not None:
+                requirements.append(entry)
+            continue
+        for sentence in split_sentences_simple(section.text):
+            found = _REQUIREMENT_WORD_RE.search(sentence)
+            if found is None or sentence.endswith("?"):
+                continue
+            ref_match = _LEADING_REF_RE.match(sentence)
+            text = sentence[ref_match.end() :].strip() if ref_match else sentence
+            if not text:
+                continue
+            requirements.append(
+                _requirement_entry(
+                    section,
+                    ref_match.group(1) if ref_match else None,
+                    text,
+                    _PRIORITY_WORDS[found.group(1).lower()],
+                    taxonomy,
+                )
+            )
+    return {"requirements": requirements}
+
+
+def requirement_judgement(user: str, history: History | None) -> dict[str, Any]:
+    """A (compliant now) when the best candidate shares at least half of the requirement's
+    content words, B (in part) when it shares at least a third, quoting its closest sentence;
+    otherwise no suggestion. Never C: shared words cannot show that something is impossible."""
+    body = user.split("REQUIREMENT\n", 1)[1] if "REQUIREMENT\n" in user else user
+    head, _, rest = body.partition("\nCANDIDATES (")
+    requirement = " ".join(
+        line.strip()
+        for line in head.split("\n")
+        if line.strip() and not line.startswith(("Ref:", "Priority:", "Topics:"))
+    )
+    candidates_block = rest.split("\nFACTS (", 1)[0]
+    parts = re.split(r"^\[(C\d+)\] ", candidates_block, flags=re.MULTILINE)
+    best: tuple[float, str, str] | None = None  # (share, label, candidate text)
+    for position in range(1, len(parts) - 1, 2):
+        label, text = parts[position], parts[position + 1]
+        lines = text.split("\n")[1:]
+        content = " ".join(
+            line.split(": ", 1)[1] if line.startswith(("Past answer: ", "Excerpt: ")) else ""
+            for line in lines
+        ).strip()
+        share = word_share(requirement, content)
+        if content and (best is None or share > best[0]):
+            best = (share, label, content)
+    if best is None or best[0] < 1 / 3:
+        return {"suggested_class": None, "rationale": "", "evidence": []}
+    share, label, content = best
+    sentences = split_sentences_simple(content.rstrip("…"), complete_only=True) or [content]
+    quote = max(sentences, key=lambda sentence: word_share(requirement, sentence))
+    if share >= 0.5:
+        return {
+            "suggested_class": "A",
+            "rationale": f"The library states: {quote}",
+            "evidence": [{"source": label, "quote": quote}],
+        }
+    return {
+        "suggested_class": "B",
+        "rationale": f"The library covers part of this requirement: {quote}",
+        "evidence": [{"source": label, "quote": quote}],
+    }
+
+
 @dataclass
 class _Candidate:
     id: str
@@ -996,6 +1125,8 @@ PARSE_HANDLERS: dict[str, ParseHandler] = {
     "coverage_judgement": coverage_judgement,
     "query_rewrite": query_rewrite,
     "entailment": entailment,
+    "extract_requirements": extract_requirements,
+    "requirement_judgement": requirement_judgement,
 }
 
 
@@ -1075,9 +1206,11 @@ __all__ = [
     "entailment",
     "extract_pairs",
     "extract_questions",
+    "extract_requirements",
     "facts_in",
     "parse_british_date",
     "query_rewrite",
+    "requirement_judgement",
     "split_sentences_simple",
     "synthesis_lines",
     "topics_for",

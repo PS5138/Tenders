@@ -31,7 +31,11 @@ export async function ensureUser(key: PersonKey): Promise<string> {
   return data.user.id;
 }
 
-export async function ensureWorkspace(name: string, members: Array<{ userId: string; role: 'admin' | 'member'; title: string }>): Promise<string> {
+export async function ensureWorkspace(
+  name: string,
+  members: Array<{ userId: string; role: 'admin' | 'member'; title: string }>,
+  options: { synthetic?: boolean } = {},
+): Promise<string> {
   const workspaceId = await withService(async (tx) => {
     const [existing] = await tx<{ id: string }[]>`select id from app.workspaces where name = ${name}`;
     const id =
@@ -45,7 +49,7 @@ export async function ensureWorkspace(name: string, members: Array<{ userId: str
     }
     return id;
   });
-  await provisionOrganisation(workspaceId, name);
+  await provisionOrganisation(workspaceId, name, options);
   return workspaceId;
 }
 
@@ -55,7 +59,12 @@ export async function seedPeopleAndWorkspaces() {
   for (const account of DEV_ACCOUNTS) ids[account.key] = await ensureUser(account.key);
   const members = (business: DevAccount['business']) =>
     DEV_ACCOUNTS.filter((a) => a.business === business).map((a) => ({ userId: ids[a.key], role: a.role, title: a.title }));
-  const exampleHealth = await ensureWorkspace('Example Health (fictional)', members('example'));
-  const riverside = await ensureWorkspace('Riverside Medical (fictional, isolation checks)', members('riverside'));
-  return { ids, exampleHealth, riverside };
+  // The two fictional businesses are synthetic demonstrations: simulated AI, synthetic uploads only.
+  const exampleHealth = await ensureWorkspace('Example Health (fictional)', members('example'), { synthetic: true });
+  const riverside = await ensureWorkspace('Riverside Medical (fictional, isolation checks)', members('riverside'), { synthetic: true });
+  // The live business: the real providers from the repo-root .env, any document, and an empty library
+  // of its own, so nothing synthetic is ever retrieved for a real tender. The Example Health people
+  // are its members, so one sign-in reaches both through the business switcher.
+  const live = await ensureWorkspace('Live workspace', members('example'), { synthetic: false });
+  return { ids, exampleHealth, riverside, live };
 }

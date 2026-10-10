@@ -4,7 +4,7 @@ import { ChevronRight, MessageSquarePlus } from 'lucide-react';
 import { highlightRanges, quoteFor, relocate, type Anchor } from '@/lib/comment-anchors';
 import { Badge } from '@/components/ui/badge';
 import { buttonClasses } from '@/components/ui/button';
-import { ClassBadge, CoverageBadge, StatusBadge } from './badges';
+import { CoverageBadge, StatusBadge } from './badges';
 import { CommentsPanel, useCommentThreads, type PlacedThread } from './comments';
 import { People } from './people';
 import { MentionText, MentionTextarea } from './mention-textarea';
@@ -464,7 +464,6 @@ export function QuestionWorkspace({
             <div className="flex flex-wrap gap-1.5">
               <StatusBadge status={q.status} />
               <CoverageBadge coverage={q.coverage} />
-              <ClassBadge value={q.compliance_class} />
               {q.mandatory ? <Badge>Mandatory</Badge> : null}
               <Badge>{q.word_limit ? `${q.word_limit} word limit` : 'No word limit'}</Badge>
               {q.weighting ? <Badge>Weighting {q.weighting}</Badge> : null}
@@ -763,37 +762,6 @@ export function QuestionWorkspace({
                       busy={busy}
                       onOwner={(name) => void act(`/questions/${q.id}`, { assignee: name }, 'PATCH')}
                     />
-                    <form
-                      className="space-y-3 border-t border-line pt-4"
-                      key={`${q.compliance_class}-${q.compliant_by}`}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const f = new FormData(e.currentTarget);
-                        void act(
-                          `/questions/${q.id}`,
-                          {
-                            compliance_class: f.get('class') || null,
-                            compliant_by: f.get('date') || null,
-                          },
-                          'PATCH',
-                        );
-                      }}
-                    >
-                      <Field title="Compliance class (can you meet this requirement?)">
-                        <select className={field} name="class" defaultValue={q.compliance_class ?? ''}>
-                          <option value="">Not yet classified</option>
-                          <option value="A">A · Compliant now</option>
-                          <option value="B">B · Compliant by a date</option>
-                          <option value="C">C · Cannot comply</option>
-                        </select>
-                      </Field>
-                      <Field title="Compliant by (class B)">
-                        <input className={field} type="date" name="date" defaultValue={q.compliant_by ?? ''} />
-                      </Field>
-                      <Button size="sm" busy={busy} type="submit">
-                        Save compliance
-                      </Button>
-                    </form>
                     <div className="space-y-2 border-t border-line pt-4">
                       <h3 className="text-sm font-semibold">Evidence to attach</h3>
                       {q.evidence?.map((e) => (

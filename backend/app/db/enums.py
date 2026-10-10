@@ -124,6 +124,14 @@ class ComplianceClass(StrEnum):
     C = "C"
 
 
+class RequirementPriority(StrEnum):
+    """MoSCoW priority of a specification requirement, as the buyer states it."""
+
+    MUST = "must"
+    SHOULD = "should"
+    COULD = "could"
+
+
 class QuestionStatus(StrEnum):
     """Review state of a question's current answer. Ordinal, in this order."""
 
@@ -169,6 +177,8 @@ class EventType(StrEnum):
     TENDER_SUBMITTED = "tender_submitted"
     OUTCOME_SET = "outcome_set"
     SUPERSESSION_REVERSED = "supersession_reversed"
+    # Added in migration 0004.
+    REQUIREMENT_RATED = "requirement_rated"
 
 
 class EntityType(StrEnum):
@@ -183,6 +193,8 @@ class EntityType(StrEnum):
     THREAD = "thread"
     SUPERSESSION_DECISION = "supersession_decision"
     KNOWLEDGE_ITEM = "knowledge_item"
+    # Added in migration 0004.
+    REQUIREMENT = "requirement"
 
 
 class JobKind(StrEnum):
@@ -190,6 +202,8 @@ class JobKind(StrEnum):
     EXTRACT_QUESTIONS = "extract_questions"
     TRIAGE_TENDER = "triage_tender"
     DRAFT_ALL = "draft_all"
+    # Added in migration 0004.
+    EXTRACT_REQUIREMENTS = "extract_requirements"
 
 
 class JobStatus(StrEnum):

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.models import Organisation
 from app.db.session import get_db
+from app.llm.scope import set_org_scope, synthetic_for_org
 from app.review.events import SYSTEM_ACTOR
 
 MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -50,6 +51,24 @@ async def actor_guard(request: Request) -> None:
     """App-level dependency: every mutating request must carry a valid X-Actor header."""
     if request.method.upper() in MUTATING_METHODS:
         _validate_actor(request.headers.get(ACTOR_HEADER))
+
+
+async def org_scope_guard(request: Request, db: DbSession) -> None:
+    """App-level dependency: run the request on the providers its organisation calls for.
+
+    Async on purpose: FastAPI awaits it in the request's own context, so the flag it sets
+    reaches the handler and every task the handler starts (``app.llm.scope``). A malformed or
+    unknown X-Org-Id is left to ``get_org_id`` to refuse; it counts as not synthetic here.
+    """
+    raw = request.headers.get(ORG_HEADER)
+    if raw is None or not raw.strip():
+        org_id = get_settings().default_org_id
+    else:
+        try:
+            org_id = uuid.UUID(raw.strip())
+        except ValueError:
+            return
+    set_org_scope(synthetic_for_org(db, org_id))
 
 
 def get_actor(request: Request) -> str:

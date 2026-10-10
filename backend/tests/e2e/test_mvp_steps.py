@@ -220,7 +220,7 @@ async def step_2_tender(client: httpx.AsyncClient, eval_data: EvalData, run_jobs
     extract_job_id = upload["job_id"]
 
     ran = run_jobs()
-    assert ran == 2, f"step 2: expected extract then triage, ran {ran} job(s)"
+    assert ran == 3, f"step 2: expected extract, triage and the requirement scan, ran {ran} job(s)"
     extract_job = await get(client, f"/jobs/{extract_job_id}")
     assert extract_job["status"] == "done", extract_job["error"]
     assert extract_job["next_job_id"], "extraction chains the triage job"
@@ -232,6 +232,13 @@ async def step_2_tender(client: httpx.AsyncClient, eval_data: EvalData, run_jobs
     detail = await get(client, f"/tenders/{tender['id']}")
     assert detail["extract_job_id"] == extract_job_id
     assert detail["triage_job_id"] == extract_job["next_job_id"]
+    assert detail["requirements_job_id"], "extraction requests the requirement scan"
+    requirements_job = await get(client, f"/jobs/{detail['requirements_job_id']}")
+    assert requirements_job["kind"] == "extract_requirements"
+    assert requirements_job["status"] == "done", requirements_job["error"]
+    requirements = await get(client, f"/tenders/{tender['id']}/requirements")
+    assert requirements["job"] == detail["requirements_job_id"]
+    assert requirements["summary"]["total"] == len(requirements["requirements"])
     assert detail["questions_total"] == pack["expected"]["question_count"]
     assert detail["documents"][0]["ingest_status"] == "ready"
 

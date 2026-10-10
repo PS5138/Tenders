@@ -264,6 +264,18 @@ class TenderDocumentSummary(ApiModel):
     ingest_error: str | None = None
 
 
+class RequirementCounts(ApiModel):
+    """Specification requirements by human-confirmed compliance class. ``green`` is class A,
+    ``amber`` class B and ``red`` class C; ``unrated`` have no confirmed class yet (an AI
+    suggestion does not count until a person accepts it)."""
+
+    green: int = 0
+    amber: int = 0
+    red: int = 0
+    unrated: int = 0
+    total: int = 0
+
+
 class TenderDetail(TenderListItem):
     outcome_notes: str | None = None
     regime: str | None = None
@@ -271,12 +283,76 @@ class TenderDetail(TenderListItem):
     submitted_at: datetime | None = None
     extract_job_id: uuid.UUID | None = None
     triage_job_id: uuid.UUID | None = None
+    requirements_job_id: uuid.UUID | None = None
+    requirement_counts: RequirementCounts = Field(default_factory=RequirementCounts)
+    # Question-level compliance counts, kept for compatibility; compliance class now belongs
+    # to specification requirements (``requirement_counts``).
     c_count: int
     unclassified_mandatory_count: int
     needs_review_count: int
     documents: list[TenderDocumentSummary] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+# --- Requirements ---------------------------------------------------------------------------
+
+
+class RequirementLocator(ApiModel):
+    """Where the requirement's text sits in its tender document; ``start`` and ``end`` are null
+    when the text was not located in the section."""
+
+    document_id: uuid.UUID
+    section_id: uuid.UUID
+    start: int | None = None
+    end: int | None = None
+    page: int | None = None
+    table: int | None = None
+    cell_ref: str | None = None
+    heading_path: list[str] = Field(default_factory=list)
+
+
+class RequirementRecord(ApiModel):
+    id: uuid.UUID
+    tender_id: uuid.UUID
+    document_id: uuid.UUID
+    document_filename: str
+    tender_doc_kind: str | None = None
+    locator: RequirementLocator
+    ref: str | None = None
+    text: str
+    priority: Literal["must", "should", "could"] | None = None
+    order_index: int
+    topics: list[str] = Field(default_factory=list)
+    # The AI suggestion: never counts until a person accepts it into ``compliance_class``.
+    # ``suggestion`` carries ``label_source`` (floor | llm), ``best_vec``, ``rationale`` and
+    # ``evidence`` (document sources with verified offsets).
+    suggested_class: Literal["A", "B", "C"] | None = None
+    suggestion: dict[str, Any] = Field(default_factory=dict)
+    compliance_class: Literal["A", "B", "C"] | None = None
+    compliant_by: date | None = None
+    comment: str | None = None
+    owner: str | None = None
+    rated_by: str | None = None
+    rated_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RequirementSummary(RequirementCounts):
+    """``suggested_unrated``: unrated requirements that carry an AI suggestion."""
+
+    suggested_unrated: int = 0
+
+
+class RequirementList(ApiModel):
+    summary: RequirementSummary
+    job: uuid.UUID | None = None
+    requirements: list[RequirementRecord] = Field(default_factory=list)
+
+
+class RescanResponse(ApiModel):
+    job_id: uuid.UUID
 
 
 # --- Threads --------------------------------------------------------------------------------

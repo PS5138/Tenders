@@ -14,7 +14,8 @@ const rule = (methods: string[], path: string, query: string[] = []): Rule => ({
 const rules: Rule[] = [
   rule(['GET', 'POST'], '/tenders'),
   rule(['GET', 'PATCH'], `/tenders/${id}`),
-  rule(['GET'], `/tenders/${id}/questions`),
+  rule(['GET'], `/tenders/${id}/(questions|requirements)`),
+  rule(['POST'], `/tenders/${id}/requirements/rescan`),
   rule(['POST'], `/tenders/${id}/(documents|retriage|draft-all|submit)`),
   rule(['GET'], `/tenders/${id}/export`, ['format', 'mode']),
   rule(['GET', 'POST'], '/documents'),
@@ -26,6 +27,7 @@ const rules: Rule[] = [
   rule(['GET'], `/library/items/${id}`),
   rule(['POST'], `/library/supersession-decisions/${id}`),
   rule(['GET'], `/jobs/${id}`),
+  rule(['PATCH'], `/requirements/${id}`),
   rule(['GET', 'PATCH'], `/questions/${id}`),
   rule(['GET', 'POST'], `/questions/${id}/answers`),
   rule(['GET'], `/questions/${id}/events`),

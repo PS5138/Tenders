@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -124,12 +125,38 @@ def pack_rows(out: Path) -> list[tuple]:
 
 def test_every_output_file_exists(out: Path, manifest: dict) -> None:
     filenames = {doc["filename"] for doc in manifest["documents"]}
-    assert len([f for f in filenames if f.endswith(".docx")]) == 5
+    assert len([f for f in filenames if f.endswith(".docx")]) == 6
     assert len([f for f in filenames if f.endswith(".xlsx")]) == 1
     for filename in filenames:
         assert (out / filename).is_file(), filename
     assert (out / "ground_truth.json").is_file()
     assert manifest["mode"] == "template"
+
+
+def test_specification_states_every_requirement_once(out: Path, manifest: dict) -> None:
+    """The buyer's specification: an introduction with no obligation in it, numbered paragraphs
+    and a Ref | Requirement | Priority table, and every requirement in the manifest written once
+    with its reference."""
+    spec = next(doc for doc in manifest["documents"] if doc["role"] == "specification")
+    assert spec["expected"]["tender_doc_kind"] == "specification"
+    requirements = spec["requirements"]
+    assert len(requirements) == spec["expected"]["requirement_count"] >= 15
+    assert {item["priority"] for item in requirements} == {"must", "should", "could"}
+    assert {item["expected"] for item in requirements} == {"covered", "partial", "none"}
+
+    document = Document(str(out / spec["filename"]))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    table_rows = [[cell.text for cell in row.cells] for t in document.tables for row in t.rows]
+    assert table_rows[0] == ["Ref", "Requirement", "Priority"]
+    stated = paragraphs + [" ".join(row) for row in table_rows]
+    for item in requirements:
+        hits = [line for line in stated if item["text"] in line and item["ref"] in line]
+        assert len(hits) == 1, item["ref"]
+    introduction = paragraphs[paragraphs.index("1. Introduction") + 1 : paragraphs.index(
+        "2. Clinical safety"
+    )]
+    obligation = re.compile(r"\b(must|shall|should|could|required)\b", re.IGNORECASE)
+    assert introduction and not any(obligation.search(line) for line in introduction)
 
 
 def test_offline_mode_makes_no_llm_calls(tmp_path: Path, fake_llm) -> None:  # noqa: ANN001
@@ -140,7 +167,7 @@ def test_offline_mode_makes_no_llm_calls(tmp_path: Path, fake_llm) -> None:  # n
 
 def test_cli_entry_point(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--out", str(tmp_path), "--seed", "1", "--mode", "template"]) == 0
-    assert "Wrote 6 documents" in capsys.readouterr().out
+    assert "Wrote 7 documents" in capsys.readouterr().out
     assert (tmp_path / "ground_truth.json").is_file()
 
 

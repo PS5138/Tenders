@@ -6,7 +6,6 @@ import { REVIEWER_ROLE_LABELS, type ReviewerRole } from '@/lib/review-roles';
 import { formatEvidenceScore, supportedText } from '@/lib/format';
 import { COVERAGE_ORDER, SORT_LABELS, STATUS_ORDER, wordUsage, type QuestionSort, type SortKey } from '@/lib/question-table';
 import { Badge } from '@/components/ui/badge';
-import { ClassBadge } from './badges';
 import { label, type S } from './shared';
 
 export type Question = S['QuestionListItem'];
@@ -113,7 +112,6 @@ const COLUMNS: { key: SortKey; label: string; className?: string }[] = [
   { key: 'order', label: 'Question' },
   { key: 'status', label: 'Status' },
   { key: 'coverage', label: 'Coverage' },
-  { key: 'compliance', label: 'Class' },
   { key: 'weighting', label: 'Weighting', className: 'text-right' },
   { key: 'assignee', label: 'Owner' },
   { key: 'words', label: 'Words / limit', className: 'text-right' },
@@ -195,7 +193,6 @@ export function QuestionTable({
                 <td className="px-3 py-2">
                   <CoverageDot coverage={q.coverage} />
                 </td>
-                <td className="px-3 py-2">{q.compliance_class ? <ClassBadge value={q.compliance_class} /> : <span className="text-muted">—</span>}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{q.weighting ?? <span className="text-muted">—</span>}</td>
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-2">
@@ -290,7 +287,6 @@ export function QuestionBoard({
                   <h3 className="my-1.5 line-clamp-3 text-[13px] font-medium leading-snug">{q.text}</h3>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <CoverageDot coverage={q.coverage} />
-                    <ClassBadge value={q.compliance_class} />
                     {q.mandatory ? <Badge>Mandatory</Badge> : null}
                     {q.needs_review ? <Badge tone="red">Needs review</Badge> : null}
                   </div>

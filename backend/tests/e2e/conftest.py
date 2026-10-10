@@ -5,11 +5,12 @@ used as they are.
 - ``heuristic_llm``: swaps ``HeuristicFakeLLM`` in through the same provider switch the
   ``fake_llm`` fixture uses (``LLM_PROVIDER=fake`` plus ``reset_llm()``), by pointing the
   client module's ``FakeLLM`` name at the subclass before the cached client is rebuilt.
-- ``job_handlers``: the ingest, extraction and triage handlers registered by importing their
-  modules, as the worker's start-up does.
-- ``bound_sessions``: the detached runner's ``session_factory`` and the triage pool's
-  ``new_session`` bound to the test connection as savepoint sessions, with an inline executor,
-  so everything the pipeline commits is visible to the test and rolled back at the end.
+- ``job_handlers``: the ingest, extraction, triage and requirement-scan handlers registered by
+  importing their modules, as the worker's start-up does.
+- ``bound_sessions``: the detached runner's ``session_factory`` and the triage and requirement
+  pools' ``new_session`` bound to the test connection as savepoint sessions, with an inline
+  executor, so everything the pipeline commits is visible to the test and rolled back at the
+  end.
 - ``run_jobs``: dispatches queued jobs through the worker's ``run_once`` until the queue is
   empty, as the worker process would.
 - ``eval_data``: the synthetic files, manifest and ground truth.
@@ -65,7 +66,7 @@ def heuristic_llm(
 
 @pytest.fixture
 def job_handlers() -> dict[str, Any]:
-    """The handlers for the three job kinds this test runs, registered by importing their
+    """The handlers for the four job kinds this test runs, registered by importing their
     modules exactly as the worker's start-up does through ``app.worker.HANDLER_MODULES``.
 
     The registrations are left in place: importing registers once per process, and the
@@ -74,6 +75,7 @@ def job_handlers() -> dict[str, Any]:
     """
     import app.ingest.jobs as ingest_jobs
     import app.ingest.questions as questions
+    import app.ingest.requirements as requirements
     import app.retrieve.triage as triage
     from app.jobs import registry
 
@@ -81,6 +83,7 @@ def job_handlers() -> dict[str, Any]:
         "ingest_document": ingest_jobs.ingest_document,
         "extract_questions": questions.extract_questions,
         "triage_tender": triage.triage_tender,
+        "extract_requirements": requirements.extract_requirements,
     }
     for kind, handler in handlers.items():
         # Idempotent: the same function the import registered, put back if a test removed it.
@@ -108,7 +111,7 @@ def bound_sessions(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[Callable[[], Session]]:
     from app.generate import runner
-    from app.retrieve import triage
+    from app.retrieve import requirements, triage
 
     connection = db_session.get_bind()
 
@@ -120,6 +123,8 @@ def bound_sessions(
     monkeypatch.setattr(runner, "session_factory", factory)
     monkeypatch.setattr(triage, "new_session", factory)
     monkeypatch.setattr(triage, "_make_executor", lambda max_workers: InlineExecutor())
+    monkeypatch.setattr(requirements, "new_session", factory)
+    monkeypatch.setattr(requirements, "_make_executor", lambda max_workers: InlineExecutor())
     runner._RUNS.clear()
     try:
         yield factory

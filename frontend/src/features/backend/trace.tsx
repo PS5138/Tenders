@@ -8,6 +8,8 @@ import { ErrorNote, label, panel } from './shared';
 import { Button } from '@/components/ui/button';
 import { Check, CircleAlert, Flag, LoaderCircle, PenLine, TriangleAlert, UserCheck, type LucideIcon } from 'lucide-react';
 export type Source = S['DocumentSource'];
+/** What the source pane needs: a section, optional offsets to highlight, and a title and quote to fall back on. */
+export type PaneSource = Pick<Source, 'locator' | 'quote' | 'document_title'>;
 export type Highlight = { segment: number; start: number; end: number; threadId: string };
 
 type MarkerStyle = { icon: LucideIcon | null; pill: string; text: string; meaning: string };
@@ -418,7 +420,7 @@ export function Trace({
   );
 }
 
-export function SourcePane({ workspaceId, source, onClose }: { workspaceId: string; source: Source; onClose: () => void }) {
+export function SourcePane({ workspaceId, source, onClose }: { workspaceId: string; source: PaneSource; onClose: () => void }) {
   const [data, setData] = useState<S['SectionResponse'] | null>(null),
     [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);

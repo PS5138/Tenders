@@ -2,13 +2,15 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tenders API",
-    "description": "Tender-response backend. Mutating requests carry an X-Actor header; X-Org-Id defaults to the seeded organisation.",
+    "description": "Tender-response backend. Service-authenticated: the Next.js server sets X-Actor and X-Org-Id on every request and the browser never calls this API directly. Without a proxy (tests, the harness, curl) X-Org-Id defaults to the seeded organisation.",
     "version": "0.1.0"
   },
   "paths": {
     "/health": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "summary": "Health",
         "operationId": "health_health_get",
         "responses": {
@@ -27,7 +29,9 @@
     },
     "/organisations": {
       "post": {
-        "tags": ["organisations"],
+        "tags": [
+          "organisations"
+        ],
         "summary": "Provision",
         "description": "Caller-generated IDs make retries safe across the two databases.",
         "operationId": "provision_organisations_post",
@@ -65,9 +69,61 @@
         }
       }
     },
+    "/organisations/current": {
+      "get": {
+        "tags": [
+          "organisations"
+        ],
+        "summary": "Current",
+        "description": "The organisation X-Org-Id names, so the front end can label a synthetic business.",
+        "operationId": "current_organisations_current_get",
+        "parameters": [
+          {
+            "name": "X-Org-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganisationRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/{document_id}/file": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Original File",
         "operationId": "original_file_documents__document_id__file_get",
         "parameters": [
@@ -122,7 +178,9 @@
     },
     "/documents": {
       "post": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Upload Document",
         "description": "Multipart upload to the library; returns the document and an ingest_document job_id.\n\nA plain ``def`` like every other non-streaming handler: the file write and the database\nround trips are synchronous, and FastAPI's threadpool keeps them off the event loop that\ndrains the draft and reply streams.",
         "operationId": "upload_document_documents_post",
@@ -178,7 +236,9 @@
         }
       },
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "List Documents",
         "description": "Library documents only (tender_id null) with item_counts and fact_count.",
         "operationId": "list_documents_documents_get",
@@ -230,7 +290,9 @@
     },
     "/documents/{document_id}": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Get Document",
         "operationId": "get_document_documents__document_id__get",
         "parameters": [
@@ -285,7 +347,9 @@
         }
       },
       "patch": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Patch Document",
         "description": "Override classification fields; runs the corrections in ingestion step 9.",
         "operationId": "patch_document_documents__document_id__patch",
@@ -353,7 +417,9 @@
     },
     "/documents/{document_id}/confirm": {
       "post": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Confirm Document",
         "description": "Sets classification_confirmed and evaluates supersession.",
         "operationId": "confirm_document_documents__document_id__confirm_post",
@@ -411,7 +477,9 @@
     },
     "/documents/{document_id}/sections": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "List Document Sections",
         "operationId": "list_document_sections_documents__document_id__sections_get",
         "parameters": [
@@ -472,7 +540,9 @@
     },
     "/documents/{document_id}/unpaired": {
       "get": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "List Unpaired",
         "description": "text_verified = false items and unresolved fragments.",
         "operationId": "list_unpaired_documents__document_id__unpaired_get",
@@ -530,7 +600,9 @@
     },
     "/documents/{document_id}/pairs": {
       "post": {
-        "tags": ["documents"],
+        "tags": [
+          "documents"
+        ],
         "summary": "Fix Pair",
         "description": "Fidelity fix or manual pairing by pointing at a span; writes pair_fixed.",
         "operationId": "fix_pair_documents__document_id__pairs_post",
@@ -598,7 +670,9 @@
     },
     "/sections/{section_id}": {
       "get": {
-        "tags": ["sections"],
+        "tags": [
+          "sections"
+        ],
         "summary": "Get Section",
         "operationId": "get_section_sections__section_id__get",
         "parameters": [
@@ -689,7 +763,9 @@
     },
     "/library/items": {
       "get": {
-        "tags": ["library"],
+        "tags": [
+          "library"
+        ],
         "summary": "List Items",
         "operationId": "list_items_library_items_get",
         "parameters": [
@@ -822,7 +898,9 @@
     },
     "/library/items/{item_id}": {
       "get": {
-        "tags": ["library"],
+        "tags": [
+          "library"
+        ],
         "summary": "Get Item",
         "description": "The item with its variants and locator.",
         "operationId": "get_item_library_items__item_id__get",
@@ -880,7 +958,9 @@
     },
     "/library/facts": {
       "get": {
-        "tags": ["library"],
+        "tags": [
+          "library"
+        ],
         "summary": "List Facts",
         "operationId": "list_facts_library_facts_get",
         "parameters": [
@@ -1013,7 +1093,9 @@
     },
     "/library/supersession-decisions": {
       "get": {
-        "tags": ["library"],
+        "tags": [
+          "library"
+        ],
         "summary": "List Supersession Decisions",
         "description": "Pending rows with both documents' filename, doc_kind, effective_date and its source.",
         "operationId": "list_supersession_decisions_library_supersession_decisions_get",
@@ -1075,7 +1157,9 @@
     },
     "/library/supersession-decisions/{decision_id}": {
       "post": {
-        "tags": ["library"],
+        "tags": [
+          "library"
+        ],
         "summary": "Decide Supersession",
         "description": "Body {decision: \"superseded\", superseding_document_id} or {decision: \"keep_both\"}.",
         "operationId": "decide_supersession_library_supersession_decisions__decision_id__post",
@@ -1143,7 +1227,9 @@
     },
     "/tenders": {
       "post": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Create Tender",
         "operationId": "create_tender_tenders_post",
         "parameters": [
@@ -1198,7 +1284,9 @@
         }
       },
       "get": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "List Tenders",
         "description": "[{id, name, buyer, deadline, days_remaining, status, outcome, questions_total,\nquestions_approved, words_total, words_approved}], newest first.",
         "operationId": "list_tenders_tenders_get",
@@ -1250,9 +1338,11 @@
     },
     "/tenders/{tender_id}": {
       "get": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Get Tender",
-        "description": "Tender row plus aggregates, c_count, unclassified_mandatory_count, needs_review_count,\nthe latest job ids and the tender's documents.",
+        "description": "Tender row plus aggregates, requirement_counts (specification requirements by confirmed\ncompliance class), needs_review_count, the latest job ids and the tender's documents.\nc_count and unclassified_mandatory_count (question-level) are kept for compatibility.",
         "operationId": "get_tender_tenders__tender_id__get",
         "parameters": [
           {
@@ -1306,7 +1396,9 @@
         }
       },
       "patch": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Patch Tender",
         "description": "outcome, outcome_notes, regime, is_framework. An outcome change writes an\n``outcome_set`` event and re-tags the promoted-answers document when promotion has\nhappened, so the library's tags follow the tender (plan: review pipeline).",
         "operationId": "patch_tender_tenders__tender_id__patch",
@@ -1372,9 +1464,11 @@
         }
       },
       "delete": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Delete Tender",
-        "description": "Delete a tender that was never submitted, with its documents, questions, answers,\nthreads and their events. A submitted tender is a record (its approved answers may be in the\nlibrary) and is archived instead: 409. Refused with 409 while a job or a draft for the\ntender is still running, so nothing writes into rows being removed.",
+        "description": "Delete a tender that was never submitted, with its documents, questions, answers,\nthreads and their events. A submitted tender is a record (its approved answers may be in the\nlibrary) and is archived instead: 409. Refused with 409 while anything is still writing\ninto the rows being removed: a queued or running job whose payload names the tender\n(``extract_questions``, ``triage_tender``, ``draft_all``, ``extract_requirements``) or one\nof its documents (the\nparse-only ``ingest_document`` carries ``{document_id, actor}`` and no ``tender_id``), a\nquestion draft in progress, or a streaming reply on one of the tender's threads.",
         "operationId": "delete_tender_tenders__tender_id__delete",
         "parameters": [
           {
@@ -1423,7 +1517,9 @@
     },
     "/tenders/{tender_id}/documents": {
       "post": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Upload Tender Document",
         "description": "Multipart with tender_doc_kind. A question pack enqueues extract_questions and records\nit as tenders.extract_job_id; any other kind enqueues the parse-only ingest_document. Always\nreturns the document with a top-level ``job_id``, in the same flat shape as\n``POST /documents``; 409 for a second question pack.",
         "operationId": "upload_tender_document_tenders__tender_id__documents_post",
@@ -1491,7 +1587,9 @@
     },
     "/tenders/{tender_id}/retriage": {
       "post": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Retriage Tender",
         "description": "Returns a triage_tender job; recomputes coverage for not_started questions only.",
         "operationId": "retriage_tender_tenders__tender_id__retriage_post",
@@ -1549,7 +1647,9 @@
     },
     "/tenders/{tender_id}/draft-all": {
       "post": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Draft All",
         "description": "Enqueue draft_all with payload {tender_id, include_new, actor}.",
         "operationId": "draft_all_tenders__tender_id__draft_all_post",
@@ -1624,9 +1724,11 @@
     },
     "/tenders/{tender_id}/submit": {
       "post": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Submit Tender",
-        "description": "Mark the tender submitted and offer every approved answer for promotion into the\nlibrary (when the promotion module is available).",
+        "description": "Mark the tender submitted and offer every approved answer for promotion into the\nlibrary (when the promotion module is available). 409 once ``submitted_at`` is set,\nwhatever the status now is (a submitted tender that was archived stays submitted), and\n409 for an archived tender that was never submitted: restoring is ``PATCH {status:\n\"open\"}``, so submit never doubles as an unarchive.",
         "operationId": "submit_tender_tenders__tender_id__submit_post",
         "parameters": [
           {
@@ -1682,7 +1784,9 @@
     },
     "/tenders/{tender_id}/export": {
       "get": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "Export Tender",
         "description": "?format=docx|xlsx&mode=submission|review. Runs the expiry sweep and commits it first\n(plan: Export), then builds the file; submission mode returns 409 with\n``{detail, code: \"needs_review\", question_ids}`` while any question has needs_review, the\nsame flat shape (a string ``detail`` with extra keys beside it) as every other 409.",
         "operationId": "export_tender_tenders__tender_id__export_get",
@@ -1702,7 +1806,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": ["docx", "xlsx"],
+              "enum": [
+                "docx",
+                "xlsx"
+              ],
               "type": "string",
               "default": "docx",
               "title": "Format"
@@ -1713,7 +1820,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": ["submission", "review"],
+              "enum": [
+                "submission",
+                "review"
+              ],
               "type": "string",
               "default": "submission",
               "title": "Mode"
@@ -1760,7 +1870,9 @@
     },
     "/tenders/{tender_id}/questions": {
       "get": {
-        "tags": ["tenders"],
+        "tags": [
+          "tenders"
+        ],
         "summary": "List Tender Questions",
         "description": "Every question row with an embedded current_answer summary and thread_id, in one query.",
         "operationId": "list_tender_questions_tenders__tender_id__questions_get",
@@ -1820,9 +1932,201 @@
         }
       }
     },
+    "/tenders/{tender_id}/requirements": {
+      "get": {
+        "tags": [
+          "requirements"
+        ],
+        "summary": "List Requirements",
+        "description": "{summary: {green, amber, red, unrated, total, suggested_unrated}, job: the latest\nextract_requirements job id or null, requirements: [...]} in document order.",
+        "operationId": "list_requirements_tenders__tender_id__requirements_get",
+        "parameters": [
+          {
+            "name": "tender_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tender Id"
+            }
+          },
+          {
+            "name": "X-Org-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequirementList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenders/{tender_id}/requirements/rescan": {
+      "post": {
+        "tags": [
+          "requirements"
+        ],
+        "summary": "Rescan Requirements",
+        "description": "Enqueue an extract_requirements run over every ready tender document, or return the one\nalready queued. Ratings, comments and owners are kept by the re-run.",
+        "operationId": "rescan_requirements_tenders__tender_id__requirements_rescan_post",
+        "parameters": [
+          {
+            "name": "tender_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tender Id"
+            }
+          },
+          {
+            "name": "X-Org-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RescanResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requirements/{requirement_id}": {
+      "patch": {
+        "tags": [
+          "requirements"
+        ],
+        "summary": "Patch Requirement",
+        "description": "Set any of compliance_class, compliant_by, comment and owner. A change of\ncompliance_class stamps rated_by and rated_at from X-Actor and writes a\n``requirement_rated`` event with from and to; clearing it clears both stamps. Moving to A\nor C clears compliant_by unless the same request sets it.",
+        "operationId": "patch_requirement_requirements__requirement_id__patch",
+        "parameters": [
+          {
+            "name": "requirement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Requirement Id"
+            }
+          },
+          {
+            "name": "X-Org-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Org-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequirementPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequirementRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/jobs/{job_id}": {
       "get": {
-        "tags": ["jobs"],
+        "tags": [
+          "jobs"
+        ],
         "summary": "Get Job",
         "description": "{id, kind, status, attempts, done, total, error, started_at, finished_at, next_job_id,\nresults}. The payload is backend-internal and never returned.",
         "operationId": "get_job_jobs__job_id__get",
@@ -1880,7 +2184,9 @@
     },
     "/questions/{question_id}/draft": {
       "post": {
-        "tags": ["drafts"],
+        "tags": [
+          "drafts"
+        ],
         "summary": "Draft Question",
         "description": "Streaming (NDJSON) card draft. 409 past ``ai_draft`` without ``confirm_displace``, 409\nwhile a draft is already running, 409 (never drafted) for a pricing question; 404 for a\nquestion outside the request's organisation.",
         "operationId": "draft_question_questions__question_id__draft_post",
@@ -1953,7 +2259,9 @@
     },
     "/threads/{thread_id}/messages": {
       "post": {
-        "tags": ["drafts"],
+        "tags": [
+          "drafts"
+        ],
         "summary": "Post Message",
         "description": "Streaming (NDJSON) thread reply. The user message is persisted first; 409 while a reply\nis already running for the thread, 409 (never drafted) on a pricing question's thread; 404\nfor a thread outside the request's organisation.",
         "operationId": "post_message_threads__thread_id__messages_post",
@@ -2019,7 +2327,9 @@
     },
     "/questions/{question_id}/verbatim": {
       "post": {
-        "tags": ["drafts"],
+        "tags": [
+          "drafts"
+        ],
         "summary": "Accept Verbatim Endpoint",
         "description": "A new ``ai`` version from the item's verbatim segments: support verification runs\nsynchronously, the version becomes current and status moves to ``ai_draft``. Returns\n``{answer, question}``. 409 codes: ``displacement``, ``in_progress``, ``pricing``,\n``ineligible`` (an unverified item or one from a superseded document), ``empty``.",
         "operationId": "accept_verbatim_endpoint_questions__question_id__verbatim_post",
@@ -2085,7 +2395,9 @@
     },
     "/questions/{question_id}": {
       "get": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Get Question",
         "description": "Question row plus thread_id, evidence, comments, current_answer in full,\ndraft_in_progress and allowed_transitions.",
         "operationId": "get_question_questions__question_id__get",
@@ -2141,9 +2453,11 @@
         }
       },
       "patch": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Patch Question",
-        "description": "assignee, status, compliance_class, compliant_by. A status that is not allowed returns\n409 with ``{blockers}``; the other fields are never gated.",
+        "description": "assignee, status, compliance_class, compliant_by. A status that is not allowed returns\n409 with ``{detail, to, blockers, question}``; the other fields are never gated, so they\nare applied and committed either way and ``question`` is the row as it now stands.",
         "operationId": "patch_question_questions__question_id__patch",
         "parameters": [
           {
@@ -2209,7 +2523,9 @@
     },
     "/questions/{question_id}/evidence": {
       "post": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Add Evidence",
         "operationId": "add_evidence_questions__question_id__evidence_post",
         "parameters": [
@@ -2276,7 +2592,9 @@
     },
     "/questions/{question_id}/evidence/{document_id}": {
       "delete": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Remove Evidence",
         "operationId": "remove_evidence_questions__question_id__evidence__document_id__delete",
         "parameters": [
@@ -2336,7 +2654,9 @@
     },
     "/questions/{question_id}/answers": {
       "get": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "List Answers",
         "operationId": "list_answers_questions__question_id__answers_get",
         "parameters": [
@@ -2395,7 +2715,9 @@
         }
       },
       "post": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Save Answer",
         "description": "Human edit: ``{text, base_version_id}``; re-split, re-align, one batched entailment\ncall. Returns ``{answer, question}``; 409 with ``{current_answer}`` on a stale base; 422\nwhen the authoritative splitter finds no sentence in ``text`` (whitespace only).",
         "operationId": "save_answer_questions__question_id__answers_post",
@@ -2463,7 +2785,9 @@
     },
     "/questions/{question_id}/gaps/acknowledge": {
       "post": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Acknowledge",
         "description": "``{gap, note}``; gap must equal a current gap after normalisation (422 otherwise).",
         "operationId": "acknowledge_questions__question_id__gaps_acknowledge_post",
@@ -2531,7 +2855,9 @@
     },
     "/questions/{question_id}/events": {
       "get": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "List Events",
         "description": "Events on the question and on its answer versions, newest first.",
         "operationId": "list_events_questions__question_id__events_get",
@@ -2593,7 +2919,9 @@
     },
     "/questions/{question_id}/comments": {
       "post": {
-        "tags": ["questions"],
+        "tags": [
+          "questions"
+        ],
         "summary": "Add Comment",
         "operationId": "add_comment_questions__question_id__comments_post",
         "parameters": [
@@ -2660,7 +2988,9 @@
     },
     "/answers/{answer_id}/segments/{index}/attest": {
       "post": {
-        "tags": ["answers"],
+        "tags": [
+          "answers"
+        ],
         "summary": "Attest Segment",
         "description": "``{note?}``; only on an unsupported, weak or human_authored segment of the current\nversion (409 otherwise).",
         "operationId": "attest_segment_answers__answer_id__segments__index__attest_post",
@@ -2744,7 +3074,9 @@
     },
     "/answers/{answer_id}/segments/{index}/dispute": {
       "post": {
-        "tags": ["answers"],
+        "tags": [
+          "answers"
+        ],
         "summary": "Dispute Segment",
         "description": "``{note}``; only on a supported segment of the current version (409 otherwise).",
         "operationId": "dispute_segment_answers__answer_id__segments__index__dispute_post",
@@ -2821,7 +3153,9 @@
     },
     "/threads": {
       "post": {
-        "tags": ["threads"],
+        "tags": [
+          "threads"
+        ],
         "summary": "Create Thread",
         "description": "Tender-level threads only; question threads are created at extraction.",
         "operationId": "create_thread_threads_post",
@@ -2879,7 +3213,9 @@
     },
     "/threads/{thread_id}": {
       "get": {
-        "tags": ["threads"],
+        "tags": [
+          "threads"
+        ],
         "summary": "Get Thread",
         "operationId": "get_thread_threads__thread_id__get",
         "parameters": [
@@ -2936,7 +3272,9 @@
     },
     "/messages/{message_id}/save-as-answer": {
       "post": {
-        "tags": ["threads"],
+        "tags": [
+          "threads"
+        ],
         "summary": "Save As Answer",
         "description": "``{confirm_displace?}``; 409 on a question past ``ai_draft`` without the flag, with the\nsame ``{detail, code: \"displacement\", current_answer}`` body as the card draft and\naccept-verbatim so the interface's one confirmation dialog handles all three. Returns\n``{answer, question}``.",
         "operationId": "save_as_answer_messages__message_id__save_as_answer_post",
@@ -3011,7 +3349,9 @@
     },
     "/fixtures/answer": {
       "get": {
-        "tags": ["fixtures"],
+        "tags": [
+          "fixtures"
+        ],
         "summary": "Fixture Answer",
         "description": "{question, answer, thread} in the shapes of GET /questions/{id}, one item of\nGET /questions/{id}/answers and GET /threads/{id}.",
         "operationId": "fixture_answer_fixtures_answer_get",
@@ -3031,7 +3371,9 @@
     },
     "/fixtures/draft": {
       "post": {
-        "tags": ["fixtures"],
+        "tags": [
+          "fixtures"
+        ],
         "summary": "Fixture Draft",
         "description": "Replay the fixture answer over the streaming contract (application/x-ndjson).",
         "operationId": "fixture_draft_fixtures_draft_post",
@@ -3132,7 +3474,9 @@
           }
         },
         "type": "object",
-        "required": ["gap"],
+        "required": [
+          "gap"
+        ],
         "title": "AcknowledgeBody"
       },
       "AllowedTransition": {
@@ -3154,7 +3498,10 @@
           }
         },
         "type": "object",
-        "required": ["to", "allowed"],
+        "required": [
+          "to",
+          "allowed"
+        ],
         "title": "AllowedTransition"
       },
       "AnswerRecord": {
@@ -3175,7 +3522,10 @@
           },
           "author_type": {
             "type": "string",
-            "enum": ["ai", "user"],
+            "enum": [
+              "ai",
+              "user"
+            ],
             "title": "Author Type"
           },
           "author_name": {
@@ -3364,7 +3714,9 @@
           }
         },
         "type": "object",
-        "required": ["kind"],
+        "required": [
+          "kind"
+        ],
         "title": "Blocker"
       },
       "Body_upload_document_documents_post": {
@@ -3376,7 +3728,9 @@
           }
         },
         "type": "object",
-        "required": ["file"],
+        "required": [
+          "file"
+        ],
         "title": "Body_upload_document_documents_post"
       },
       "Body_upload_tender_document_tenders__tender_id__documents_post": {
@@ -3392,7 +3746,10 @@
           }
         },
         "type": "object",
-        "required": ["tender_doc_kind", "file"],
+        "required": [
+          "tender_doc_kind",
+          "file"
+        ],
         "title": "Body_upload_tender_document_tenders__tender_id__documents_post"
       },
       "CommentBody": {
@@ -3404,7 +3761,9 @@
           }
         },
         "type": "object",
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "title": "CommentBody"
       },
       "CommentRecord": {
@@ -3429,12 +3788,21 @@
           }
         },
         "type": "object",
-        "required": ["id", "author", "text", "created_at"],
+        "required": [
+          "id",
+          "author",
+          "text",
+          "created_at"
+        ],
         "title": "CommentRecord"
       },
       "ComplianceClass": {
         "type": "string",
-        "enum": ["A", "B", "C"],
+        "enum": [
+          "A",
+          "B",
+          "C"
+        ],
         "title": "ComplianceClass"
       },
       "CreateThreadBody": {
@@ -3457,7 +3825,9 @@
           }
         },
         "type": "object",
-        "required": ["tender_id"],
+        "required": [
+          "tender_id"
+        ],
         "title": "CreateThreadBody"
       },
       "CurrentAnswerSummary": {
@@ -3473,7 +3843,10 @@
           },
           "author_type": {
             "type": "string",
-            "enum": ["ai", "user"],
+            "enum": [
+              "ai",
+              "user"
+            ],
             "title": "Author Type"
           },
           "author_name": {
@@ -3581,7 +3954,10 @@
           }
         },
         "type": "object",
-        "required": ["id", "filename"],
+        "required": [
+          "id",
+          "filename"
+        ],
         "title": "DecisionDocument"
       },
       "DecisionRecord": {
@@ -3672,7 +4048,10 @@
         "properties": {
           "decision": {
             "type": "string",
-            "enum": ["superseded", "keep_both"],
+            "enum": [
+              "superseded",
+              "keep_both"
+            ],
             "title": "Decision"
           },
           "superseding_document_id": {
@@ -3690,7 +4069,9 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["decision"],
+        "required": [
+          "decision"
+        ],
         "title": "DecisionRequest"
       },
       "Dispute": {
@@ -3710,7 +4091,11 @@
           }
         },
         "type": "object",
-        "required": ["disputed_by", "note", "at"],
+        "required": [
+          "disputed_by",
+          "note",
+          "at"
+        ],
         "title": "Dispute"
       },
       "DisputeBody": {
@@ -3722,7 +4107,9 @@
           }
         },
         "type": "object",
-        "required": ["note"],
+        "required": [
+          "note"
+        ],
         "title": "DisputeBody"
       },
       "DocumentPatch": {
@@ -3793,7 +4180,10 @@
         "properties": {
           "source_type": {
             "type": "string",
-            "enum": ["knowledge_item", "fact"],
+            "enum": [
+              "knowledge_item",
+              "fact"
+            ],
             "title": "Source Type"
           },
           "source_id": {
@@ -3850,7 +4240,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["verbatim", "near"]
+                "enum": [
+                  "verbatim",
+                  "near"
+                ]
               },
               {
                 "type": "null"
@@ -4130,7 +4523,12 @@
           }
         },
         "type": "object",
-        "required": ["id", "event_type", "actor", "created_at"],
+        "required": [
+          "id",
+          "event_type",
+          "actor",
+          "created_at"
+        ],
         "title": "EventRecord"
       },
       "EvidenceBody": {
@@ -4153,7 +4551,9 @@
           }
         },
         "type": "object",
-        "required": ["document_id"],
+        "required": [
+          "document_id"
+        ],
         "title": "EvidenceBody"
       },
       "EvidenceRecord": {
@@ -4180,7 +4580,10 @@
           }
         },
         "type": "object",
-        "required": ["document_id", "filename"],
+        "required": [
+          "document_id",
+          "filename"
+        ],
         "title": "EvidenceRecord"
       },
       "FactChecklistEntry": {
@@ -4208,12 +4611,21 @@
           },
           "status": {
             "type": "string",
-            "enum": ["current", "superseded", "expired", "unverified"],
+            "enum": [
+              "current",
+              "superseded",
+              "expired",
+              "unverified"
+            ],
             "title": "Status"
           }
         },
         "type": "object",
-        "required": ["fact_id", "statement", "status"],
+        "required": [
+          "fact_id",
+          "statement",
+          "status"
+        ],
         "title": "FactChecklistEntry"
       },
       "FactRecord": {
@@ -4350,7 +4762,11 @@
           }
         },
         "type": "object",
-        "required": ["question", "answer", "thread"],
+        "required": [
+          "question",
+          "answer",
+          "thread"
+        ],
         "title": "FixtureAnswerResponse"
       },
       "GapAcknowledgement": {
@@ -4381,7 +4797,11 @@
           }
         },
         "type": "object",
-        "required": ["gap", "acknowledged_by", "at"],
+        "required": [
+          "gap",
+          "acknowledged_by",
+          "at"
+        ],
         "title": "GapAcknowledgement"
       },
       "HTTPValidationError": {
@@ -4443,7 +4863,10 @@
           }
         },
         "type": "object",
-        "required": ["start", "end"],
+        "required": [
+          "start",
+          "end"
+        ],
         "title": "Highlight"
       },
       "HumanAttestationSource": {
@@ -4475,7 +4898,11 @@
           }
         },
         "type": "object",
-        "required": ["source_type", "attested_by", "at"],
+        "required": [
+          "source_type",
+          "attested_by",
+          "at"
+        ],
         "title": "HumanAttestationSource"
       },
       "HumanEditBody": {
@@ -4499,7 +4926,9 @@
           }
         },
         "type": "object",
-        "required": ["text"],
+        "required": [
+          "text"
+        ],
         "title": "HumanEditBody"
       },
       "JobRecord": {
@@ -4515,7 +4944,12 @@
           },
           "status": {
             "type": "string",
-            "enum": ["queued", "running", "done", "failed"],
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed"
+            ],
             "title": "Status"
           },
           "attempts": {
@@ -4591,7 +5025,13 @@
           }
         },
         "type": "object",
-        "required": ["id", "kind", "status", "attempts", "done"],
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "attempts",
+          "done"
+        ],
         "title": "JobRecord"
       },
       "LibraryItem": {
@@ -4936,7 +5376,10 @@
           }
         },
         "type": "object",
-        "required": ["document_id", "section_id"],
+        "required": [
+          "document_id",
+          "section_id"
+        ],
         "title": "Locator"
       },
       "MessageRequest": {
@@ -4948,7 +5391,9 @@
           }
         },
         "type": "object",
-        "required": ["content"],
+        "required": [
+          "content"
+        ],
         "title": "MessageRequest"
       },
       "OrganisationCreate": {
@@ -4963,10 +5408,24 @@
             "maxLength": 200,
             "minLength": 1,
             "title": "Name"
+          },
+          "synthetic": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synthetic"
           }
         },
         "type": "object",
-        "required": ["id", "name"],
+        "required": [
+          "id",
+          "name"
+        ],
         "title": "OrganisationCreate"
       },
       "OrganisationRecord": {
@@ -4979,10 +5438,18 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "synthetic": {
+            "type": "boolean",
+            "title": "Synthetic"
           }
         },
         "type": "object",
-        "required": ["id", "name"],
+        "required": [
+          "id",
+          "name",
+          "synthetic"
+        ],
         "title": "OrganisationRecord"
       },
       "PairRequest": {
@@ -5029,18 +5496,22 @@
           },
           "answer_start": {
             "type": "integer",
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "Answer Start"
           },
           "answer_end": {
             "type": "integer",
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": 0.0,
             "title": "Answer End"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": ["section_id", "answer_start", "answer_end"],
+        "required": [
+          "section_id",
+          "answer_start",
+          "answer_end"
+        ],
         "title": "PairRequest",
         "description": "Either a fidelity fix (``item_id``) or a manual pairing (``question_fragment_id`` or\n``question_text``). Confirmation is always by pointing at a span."
       },
@@ -5067,7 +5538,10 @@
           }
         },
         "type": "object",
-        "required": ["item", "mode"],
+        "required": [
+          "item",
+          "mode"
+        ],
         "title": "PairResponse"
       },
       "QuestionDetail": {
@@ -5155,7 +5629,12 @@
           },
           "coverage": {
             "type": "string",
-            "enum": ["covered", "partial", "new", "unknown"],
+            "enum": [
+              "covered",
+              "partial",
+              "new",
+              "unknown"
+            ],
             "title": "Coverage"
           },
           "coverage_detail": {
@@ -5167,7 +5646,11 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["A", "B", "C"]
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ]
               },
               {
                 "type": "null"
@@ -5386,7 +5869,12 @@
           },
           "coverage": {
             "type": "string",
-            "enum": ["covered", "partial", "new", "unknown"],
+            "enum": [
+              "covered",
+              "partial",
+              "new",
+              "unknown"
+            ],
             "title": "Coverage"
           },
           "coverage_detail": {
@@ -5398,7 +5886,11 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["A", "B", "C"]
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ]
               },
               {
                 "type": "null"
@@ -5568,6 +6060,458 @@
         "title": "QuestionStatus",
         "description": "Review state of a question's current answer. Ordinal, in this order."
       },
+      "RequirementCounts": {
+        "properties": {
+          "green": {
+            "type": "integer",
+            "title": "Green",
+            "default": 0
+          },
+          "amber": {
+            "type": "integer",
+            "title": "Amber",
+            "default": 0
+          },
+          "red": {
+            "type": "integer",
+            "title": "Red",
+            "default": 0
+          },
+          "unrated": {
+            "type": "integer",
+            "title": "Unrated",
+            "default": 0
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RequirementCounts",
+        "description": "Specification requirements by human-confirmed compliance class. ``green`` is class A,\n``amber`` class B and ``red`` class C; ``unrated`` have no confirmed class yet (an AI\nsuggestion does not count until a person accepts it)."
+      },
+      "RequirementList": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/RequirementSummary"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementRecord"
+            },
+            "type": "array",
+            "title": "Requirements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "title": "RequirementList"
+      },
+      "RequirementLocator": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "section_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Section Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "cell_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Ref"
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "section_id"
+        ],
+        "title": "RequirementLocator",
+        "description": "Where the requirement's text sits in its tender document; ``start`` and ``end`` are null\nwhen the text was not located in the section."
+      },
+      "RequirementPatch": {
+        "properties": {
+          "compliance_class": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Class"
+          },
+          "compliant_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliant By"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          }
+        },
+        "type": "object",
+        "title": "RequirementPatch",
+        "description": "Any of the human fields. ``compliance_class: null`` clears the rating."
+      },
+      "RequirementRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tender_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tender Id"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "document_filename": {
+            "type": "string",
+            "title": "Document Filename"
+          },
+          "tender_doc_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tender Doc Kind"
+          },
+          "locator": {
+            "$ref": "#/components/schemas/RequirementLocator"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "must",
+                  "should",
+                  "could"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "order_index": {
+            "type": "integer",
+            "title": "Order Index"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Topics"
+          },
+          "suggested_class": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Class"
+          },
+          "suggestion": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Suggestion"
+          },
+          "compliance_class": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Class"
+          },
+          "compliant_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliant By"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "rated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rated By"
+          },
+          "rated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rated At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tender_id",
+          "document_id",
+          "document_filename",
+          "locator",
+          "text",
+          "order_index",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RequirementRecord"
+      },
+      "RequirementSummary": {
+        "properties": {
+          "green": {
+            "type": "integer",
+            "title": "Green",
+            "default": 0
+          },
+          "amber": {
+            "type": "integer",
+            "title": "Amber",
+            "default": 0
+          },
+          "red": {
+            "type": "integer",
+            "title": "Red",
+            "default": 0
+          },
+          "unrated": {
+            "type": "integer",
+            "title": "Unrated",
+            "default": 0
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "suggested_unrated": {
+            "type": "integer",
+            "title": "Suggested Unrated",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "RequirementSummary",
+        "description": "``suggested_unrated``: unrated requirements that carry an AI suggestion."
+      },
+      "RescanResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "RescanResponse"
+      },
       "SaveAsAnswerBody": {
         "properties": {
           "confirm_displace": {
@@ -5649,7 +6593,10 @@
           }
         },
         "type": "object",
-        "required": ["id", "filename"],
+        "required": [
+          "id",
+          "filename"
+        ],
         "title": "SectionDocument"
       },
       "SectionRecord": {
@@ -5754,7 +6701,10 @@
           }
         },
         "type": "object",
-        "required": ["section", "document"],
+        "required": [
+          "section",
+          "document"
+        ],
         "title": "SectionResponse"
       },
       "SegmentRecord": {
@@ -5773,7 +6723,10 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["substantive", "connective"],
+            "enum": [
+              "substantive",
+              "connective"
+            ],
             "title": "Kind"
           },
           "sources": {
@@ -5822,7 +6775,13 @@
           }
         },
         "type": "object",
-        "required": ["index", "paragraph", "text", "kind", "support_status"],
+        "required": [
+          "index",
+          "paragraph",
+          "text",
+          "kind",
+          "support_status"
+        ],
         "title": "SegmentRecord"
       },
       "SourceDocument": {
@@ -5895,7 +6854,10 @@
           }
         },
         "type": "object",
-        "required": ["id", "filename"],
+        "required": [
+          "id",
+          "filename"
+        ],
         "title": "SourceDocument"
       },
       "SubmitResponse": {
@@ -5909,7 +6871,10 @@
           }
         },
         "type": "object",
-        "required": ["tender", "promoted"],
+        "required": [
+          "tender",
+          "promoted"
+        ],
         "title": "SubmitResponse"
       },
       "SupportSummary": {
@@ -5946,7 +6911,12 @@
           }
         },
         "type": "object",
-        "required": ["counts", "substantive", "supported", "needs_attention"],
+        "required": [
+          "counts",
+          "substantive",
+          "supported",
+          "needs_attention"
+        ],
         "title": "SupportSummary"
       },
       "TenderCreate": {
@@ -5985,7 +6955,12 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["procurement_act", "psr", "pcr_2015", "other"]
+                "enum": [
+                  "procurement_act",
+                  "psr",
+                  "pcr_2015",
+                  "other"
+                ]
               },
               {
                 "type": "null"
@@ -6006,7 +6981,9 @@
           }
         },
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "title": "TenderCreate"
       },
       "TenderDetail": {
@@ -6056,12 +7033,21 @@
           },
           "status": {
             "type": "string",
-            "enum": ["open", "submitted", "archived"],
+            "enum": [
+              "open",
+              "submitted",
+              "archived"
+            ],
             "title": "Status"
           },
           "outcome": {
             "type": "string",
-            "enum": ["pending", "won", "lost", "unknown"],
+            "enum": [
+              "pending",
+              "won",
+              "lost",
+              "unknown"
+            ],
             "title": "Outcome"
           },
           "questions_total": {
@@ -6148,6 +7134,21 @@
               }
             ],
             "title": "Triage Job Id"
+          },
+          "requirements_job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Job Id"
+          },
+          "requirement_counts": {
+            "$ref": "#/components/schemas/RequirementCounts"
           },
           "c_count": {
             "type": "integer",
@@ -6236,7 +7237,11 @@
           }
         },
         "type": "object",
-        "required": ["id", "filename", "ingest_status"],
+        "required": [
+          "id",
+          "filename",
+          "ingest_status"
+        ],
         "title": "TenderDocumentSummary"
       },
       "TenderListItem": {
@@ -6286,12 +7291,21 @@
           },
           "status": {
             "type": "string",
-            "enum": ["open", "submitted", "archived"],
+            "enum": [
+              "open",
+              "submitted",
+              "archived"
+            ],
             "title": "Status"
           },
           "outcome": {
             "type": "string",
-            "enum": ["pending", "won", "lost", "unknown"],
+            "enum": [
+              "pending",
+              "won",
+              "lost",
+              "unknown"
+            ],
             "title": "Outcome"
           },
           "questions_total": {
@@ -6367,7 +7381,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["open", "archived"]
+                "enum": [
+                  "open",
+                  "archived"
+                ]
               },
               {
                 "type": "null"
@@ -6379,7 +7396,12 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["pending", "won", "lost", "unknown"]
+                "enum": [
+                  "pending",
+                  "won",
+                  "lost",
+                  "unknown"
+                ]
               },
               {
                 "type": "null"
@@ -6402,7 +7424,12 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["procurement_act", "psr", "pcr_2015", "other"]
+                "enum": [
+                  "procurement_act",
+                  "psr",
+                  "pcr_2015",
+                  "other"
+                ]
               },
               {
                 "type": "null"
@@ -6435,7 +7462,11 @@
           },
           "role": {
             "type": "string",
-            "enum": ["user", "assistant", "system"],
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
             "title": "Role"
           },
           "content": {
@@ -6545,7 +7576,12 @@
           }
         },
         "type": "object",
-        "required": ["id", "role", "content", "created_at"],
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
         "title": "ThreadMessage"
       },
       "ThreadRecord": {
@@ -6590,7 +7626,11 @@
           }
         },
         "type": "object",
-        "required": ["id", "tender_id", "title"],
+        "required": [
+          "id",
+          "tender_id",
+          "title"
+        ],
         "title": "ThreadRecord"
       },
       "UnpairedFragmentRecord": {
@@ -6649,7 +7689,12 @@
           }
         },
         "type": "object",
-        "required": ["id", "section_id", "role", "text"],
+        "required": [
+          "id",
+          "section_id",
+          "role",
+          "text"
+        ],
         "title": "UnpairedFragmentRecord"
       },
       "UnpairedItem": {
@@ -6772,7 +7817,11 @@
           }
         },
         "type": "object",
-        "required": ["document_id", "items", "fragments"],
+        "required": [
+          "document_id",
+          "items",
+          "fragments"
+        ],
         "title": "UnpairedResponse"
       },
       "ValidationError": {
@@ -6808,7 +7857,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       },
       "VerbatimOffer": {
@@ -6838,7 +7891,10 @@
           }
         },
         "type": "object",
-        "required": ["source_item_id", "segments"],
+        "required": [
+          "source_item_id",
+          "segments"
+        ],
         "title": "VerbatimOffer"
       },
       "VerbatimRequest": {
@@ -6855,7 +7911,9 @@
           }
         },
         "type": "object",
-        "required": ["source_item_id"],
+        "required": [
+          "source_item_id"
+        ],
         "title": "VerbatimRequest"
       }
     }

@@ -7,7 +7,9 @@ holds. Questions are upserted on (``tender_id``, ``section``, ``number``) so a r
 rather than duplicates; each new question gets its thread; every question text extracted in
 the run is embedded in one batched call; per-item outcomes go to ``jobs.results``; and the
 job ends by enqueueing ``triage_tender``, writing its id to ``next_job_id`` and to
-``tenders.triage_job_id``. The pack's ``ingest_status`` runs parsing -> extracting -> ready.
+``tenders.triage_job_id``, and by requesting the tender's ``extract_requirements`` scan
+(``app.ingest.requirements``), recorded in ``tenders.requirements_job_id``. The pack's
+``ingest_status`` runs parsing -> extracting -> ready.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from app.config import get_settings
 from app.db import enums as e
 from app.db.models import Document, DocumentSection, Job, Organisation, Question, Tender, Thread
 from app.errors import format_error
+from app.ingest.requirements import request_requirements_scan
 from app.jobs import enqueue, register, set_progress
 from app.llm import embed, get_llm, load_prompt, prompt_version
 
@@ -474,6 +477,8 @@ def extract_questions(session: Session, job: Job) -> None:
     job.next_job_id = triage.id
     tender.triage_job_id = triage.id
     document.ingest_status = e.IngestStatus.READY.value
+    # The pack is now ready too: scan every tender document for specification requirements.
+    request_requirements_scan(session, tender, actor)
     logger.info(
         "extract_questions: %d created, %d updated on tender %s (prompt %s, model %s)",
         upserter.created,

@@ -37,6 +37,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organisations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current
+         * @description The organisation X-Org-Id names, so the front end can label a synthetic business.
+         */
+        get: operations["current_organisations_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{document_id}/file": {
         parameters: {
             query?: never;
@@ -322,8 +342,9 @@ export interface paths {
         };
         /**
          * Get Tender
-         * @description Tender row plus aggregates, c_count, unclassified_mandatory_count, needs_review_count,
-         *     the latest job ids and the tender's documents.
+         * @description Tender row plus aggregates, requirement_counts (specification requirements by confirmed
+         *     compliance class), needs_review_count, the latest job ids and the tender's documents.
+         *     c_count and unclassified_mandatory_count (question-level) are kept for compatibility.
          */
         get: operations["get_tender_tenders__tender_id__get"];
         put?: never;
@@ -332,8 +353,12 @@ export interface paths {
          * Delete Tender
          * @description Delete a tender that was never submitted, with its documents, questions, answers,
          *     threads and their events. A submitted tender is a record (its approved answers may be in the
-         *     library) and is archived instead: 409. Refused with 409 while a job or a draft for the
-         *     tender is still running, so nothing writes into rows being removed.
+         *     library) and is archived instead: 409. Refused with 409 while anything is still writing
+         *     into the rows being removed: a queued or running job whose payload names the tender
+         *     (``extract_questions``, ``triage_tender``, ``draft_all``, ``extract_requirements``) or one
+         *     of its documents (the
+         *     parse-only ``ingest_document`` carries ``{document_id, actor}`` and no ``tender_id``), a
+         *     question draft in progress, or a streaming reply on one of the tender's threads.
          */
         delete: operations["delete_tender_tenders__tender_id__delete"];
         options?: never;
@@ -422,7 +447,10 @@ export interface paths {
         /**
          * Submit Tender
          * @description Mark the tender submitted and offer every approved answer for promotion into the
-         *     library (when the promotion module is available).
+         *     library (when the promotion module is available). 409 once ``submitted_at`` is set,
+         *     whatever the status now is (a submitted tender that was archived stays submitted), and
+         *     409 for an archived tender that was never submitted: restoring is ``PATCH {status:
+         *     "open"}``, so submit never doubles as an unarchive.
          */
         post: operations["submit_tender_tenders__tender_id__submit_post"];
         delete?: never;
@@ -472,6 +500,71 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/tenders/{tender_id}/requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Requirements
+         * @description {summary: {green, amber, red, unrated, total, suggested_unrated}, job: the latest
+         *     extract_requirements job id or null, requirements: [...]} in document order.
+         */
+        get: operations["list_requirements_tenders__tender_id__requirements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenders/{tender_id}/requirements/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rescan Requirements
+         * @description Enqueue an extract_requirements run over every ready tender document, or return the one
+         *     already queued. Ratings, comments and owners are kept by the re-run.
+         */
+        post: operations["rescan_requirements_tenders__tender_id__requirements_rescan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requirements/{requirement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Requirement
+         * @description Set any of compliance_class, compliant_by, comment and owner. A change of
+         *     compliance_class stamps rated_by and rated_at from X-Actor and writes a
+         *     ``requirement_rated`` event with from and to; clearing it clears both stamps. Moving to A
+         *     or C clears compliant_by unless the same request sets it.
+         */
+        patch: operations["patch_requirement_requirements__requirement_id__patch"];
         trace?: never;
     };
     "/jobs/{job_id}": {
@@ -583,7 +676,8 @@ export interface paths {
         /**
          * Patch Question
          * @description assignee, status, compliance_class, compliant_by. A status that is not allowed returns
-         *     409 with ``{blockers}``; the other fields are never gated.
+         *     409 with ``{detail, to, blockers, question}``; the other fields are never gated, so they
+         *     are applied and committed either way and ``question`` is the row as it now stands.
          */
         patch: operations["patch_question_questions__question_id__patch"];
         trace?: never;
@@ -1564,6 +1658,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Synthetic */
+            synthetic?: boolean | null;
         };
         /** OrganisationRecord */
         OrganisationRecord: {
@@ -1574,6 +1670,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Synthetic */
+            synthetic: boolean;
         };
         /**
          * PairRequest
@@ -1799,6 +1897,195 @@ export interface components {
          * @enum {string}
          */
         QuestionStatus: "not_started" | "ai_draft" | "writer_edited" | "sme_verified" | "approved";
+        /**
+         * RequirementCounts
+         * @description Specification requirements by human-confirmed compliance class. ``green`` is class A,
+         *     ``amber`` class B and ``red`` class C; ``unrated`` have no confirmed class yet (an AI
+         *     suggestion does not count until a person accepts it).
+         */
+        RequirementCounts: {
+            /**
+             * Green
+             * @default 0
+             */
+            green: number;
+            /**
+             * Amber
+             * @default 0
+             */
+            amber: number;
+            /**
+             * Red
+             * @default 0
+             */
+            red: number;
+            /**
+             * Unrated
+             * @default 0
+             */
+            unrated: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** RequirementList */
+        RequirementList: {
+            summary: components["schemas"]["RequirementSummary"];
+            /** Job */
+            job?: string | null;
+            /** Requirements */
+            requirements?: components["schemas"]["RequirementRecord"][];
+        };
+        /**
+         * RequirementLocator
+         * @description Where the requirement's text sits in its tender document; ``start`` and ``end`` are null
+         *     when the text was not located in the section.
+         */
+        RequirementLocator: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            /** Page */
+            page?: number | null;
+            /** Table */
+            table?: number | null;
+            /** Cell Ref */
+            cell_ref?: string | null;
+            /** Heading Path */
+            heading_path?: string[];
+        };
+        /**
+         * RequirementPatch
+         * @description Any of the human fields. ``compliance_class: null`` clears the rating.
+         */
+        RequirementPatch: {
+            /** Compliance Class */
+            compliance_class?: ("A" | "B" | "C") | null;
+            /** Compliant By */
+            compliant_by?: string | null;
+            /** Comment */
+            comment?: string | null;
+            /** Owner */
+            owner?: string | null;
+        };
+        /** RequirementRecord */
+        RequirementRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tender Id
+             * Format: uuid
+             */
+            tender_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Filename */
+            document_filename: string;
+            /** Tender Doc Kind */
+            tender_doc_kind?: string | null;
+            locator: components["schemas"]["RequirementLocator"];
+            /** Ref */
+            ref?: string | null;
+            /** Text */
+            text: string;
+            /** Priority */
+            priority?: ("must" | "should" | "could") | null;
+            /** Order Index */
+            order_index: number;
+            /** Topics */
+            topics?: string[];
+            /** Suggested Class */
+            suggested_class?: ("A" | "B" | "C") | null;
+            /** Suggestion */
+            suggestion?: {
+                [key: string]: unknown;
+            };
+            /** Compliance Class */
+            compliance_class?: ("A" | "B" | "C") | null;
+            /** Compliant By */
+            compliant_by?: string | null;
+            /** Comment */
+            comment?: string | null;
+            /** Owner */
+            owner?: string | null;
+            /** Rated By */
+            rated_by?: string | null;
+            /** Rated At */
+            rated_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * RequirementSummary
+         * @description ``suggested_unrated``: unrated requirements that carry an AI suggestion.
+         */
+        RequirementSummary: {
+            /**
+             * Green
+             * @default 0
+             */
+            green: number;
+            /**
+             * Amber
+             * @default 0
+             */
+            amber: number;
+            /**
+             * Red
+             * @default 0
+             */
+            red: number;
+            /**
+             * Unrated
+             * @default 0
+             */
+            unrated: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Suggested Unrated
+             * @default 0
+             */
+            suggested_unrated: number;
+        };
+        /** RescanResponse */
+        RescanResponse: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+        };
         /** SaveAsAnswerBody */
         SaveAsAnswerBody: {
             /**
@@ -1981,6 +2268,9 @@ export interface components {
             extract_job_id?: string | null;
             /** Triage Job Id */
             triage_job_id?: string | null;
+            /** Requirements Job Id */
+            requirements_job_id?: string | null;
+            requirement_counts?: components["schemas"]["RequirementCounts"];
             /** C Count */
             c_count: number;
             /** Unclassified Mandatory Count */
@@ -2282,6 +2572,37 @@ export interface operations {
                 "application/json": components["schemas"]["OrganisationCreate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganisationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_organisations_current_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Org-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -3186,6 +3507,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_requirements_tenders__tender_id__requirements_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Org-Id"?: string | null;
+            };
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rescan_requirements_tenders__tender_id__requirements_rescan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Org-Id"?: string | null;
+            };
+            path: {
+                tender_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RescanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_requirement_requirements__requirement_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Org-Id"?: string | null;
+            };
+            path: {
+                requirement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequirementPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequirementRecord"];
                 };
             };
             /** @description Validation Error */
