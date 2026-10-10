@@ -13,6 +13,7 @@ export default async function Page({ params }: PageProps<'/w/[workspaceId]/tende
       tenderId={tenderId}
       isAdmin={role === 'admin'}
       members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
+      me={members.find((m) => m.userId === user.id)?.displayName ?? ''}
     />
   );
 }

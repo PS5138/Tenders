@@ -55,7 +55,7 @@ docker compose logs -f frontend-provision frontend-seed web api worker
 
 If this machine ran the earlier single-app Ten demo, run `docker compose down -v --remove-orphans` once before the first start. Both stacks use the Compose project name `ten`, and the old `ten_storage` volume belongs to a different user, so backend uploads would fail. This erases only the old demo's synthetic data.
 
-Open `http://localhost:3000` and sign in with any development account below (password `ten-dev-only`). In this local stack, the account menu (top right) can switch between them without signing out; the switch exists only when `APP_MODE=development` and `DEMO_USER_SWITCH=true`. These accounts must never be used in a hosted demonstration.
+Open `http://localhost:3000` and sign in with any development account below (password `ten-dev-only`). In this local stack, the account menu (top right) can switch between them without signing out; the switch is on by default (including `npm run dev`), off in `APP_MODE=demo`, and `DEMO_USER_SWITCH=false` turns it off. These accounts must never be used in a hosted demonstration.
 
 | Account | Business | Access |
 |---|---|---|

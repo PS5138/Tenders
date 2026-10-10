@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { DEV_ACCOUNTS, devSwitchEnabled } from '@/lib/dev-accounts';
 
 describe('development user switch', () => {
-  it('is available only in development with the explicit flag', () => {
-    expect(devSwitchEnabled('development', 'true')).toBe(true);
+  it('is on by default outside demo mode and can be turned off', () => {
     for (const [mode, flag] of [
       ['development', undefined],
+      ['development', 'true'],
+      ['test', undefined],
+      [undefined, undefined],
+    ] as const)
+      expect(devSwitchEnabled(mode, flag)).toBe(true);
+    for (const [mode, flag] of [
       ['development', 'false'],
+      ['demo', undefined],
       ['demo', 'true'],
-      ['test', 'true'],
-      [undefined, 'true'],
     ] as const)
       expect(devSwitchEnabled(mode, flag)).toBe(false);
   });

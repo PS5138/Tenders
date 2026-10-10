@@ -10,7 +10,7 @@ const body = z.object({ email: z.string().trim().toLowerCase().email() });
 /**
  * Development-only user switch for demos and testing. It performs a real sign-in with the
  * published development password, so it cannot reach any account outside DEV_ACCOUNTS, and it
- * does not exist unless APP_MODE is development and DEMO_USER_SWITCH is true.
+ * does not exist in demo mode or when DEMO_USER_SWITCH is false.
  */
 export async function POST(req: Request) {
   try {

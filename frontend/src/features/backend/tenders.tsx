@@ -402,11 +402,14 @@ export function TenderWorkspace({
   tenderId,
   isAdmin,
   members,
+  me,
 }: {
   workspaceId: string;
   tenderId: string;
   isAdmin: boolean;
   members: { userId: string; displayName: string }[];
+  /** The signed-in member's display name, which is how backend assignees are recorded. */
+  me: string;
 }) {
   const router = useRouter();
   const tender = useResource<S['TenderDetail']>(workspaceId, `/tenders/${tenderId}`),
@@ -417,7 +420,8 @@ export function TenderWorkspace({
     [search, setSearch] = useState(''),
     [section, setSection] = useState(''),
     [sort, setSort] = useState<QuestionSort>({ key: 'order', direction: 'asc' }),
-    [owner, setOwner] = useState(''),
+    // Members start on their own questions; admins, who run the whole tender, start on everything.
+    [owner, setOwner] = useState(isAdmin ? '' : me),
     [confirmSubmit, setConfirmSubmit] = useState(false),
     [groupBy, setGroupBy] = useState<GroupBy>('status'),
     [notice, setNotice] = useState<string | null>(null),
